@@ -37,7 +37,8 @@ namespace OMX.Game
             c.Vel = Vector3.zero; c.Heading = _rng.Range(0, 360f); c.Wander = _rng.Range(0, 100f);
             c.T = _rng.Range(0, 10f); c.Cooldown = _rng.Range(0.5f, 2f); c.State = 0; c.StateTimer = 0; c.Flash = 0;
             c.Alive = true; c.Digest = -1; c.Dna = k.Dna; c.Value = 0; c.Life = k.Brain == Brain.Ally ? 45f : k.Brain == Brain.Morsel ? 30f : -1; c.Elite = false;
-            c.Root.position = c.Pos; c.Root.localScale = Vector3.one * radius * 2;
+            c.Age = 0;
+            c.Root.position = c.Pos; c.Root.localScale = Vector3.zero;
             if (c.Segments != null) for (int i = 0; i < c.Segments.Length; i++) { c.Segments[i].position = c.Pos; c.Segments[i].localScale = Vector3.one * (0.75f - i * 0.08f); }
             SetFx(c, 0, 0);
             Live.Add(c);
@@ -99,12 +100,7 @@ namespace OMX.Game
             int predTarget = Mathf.RoundToInt((3 + tier * 1.6f) * (0.6f + zone.Danger) * PredatorScale);
             if (prey < PreyTarget)
             {
-                var dna = _rng.Chance(0.62f) ? zone.Primary : _rng.Chance(0.6f) ? zone.Secondary : (Dna)_rng.Range(0, 5);
-                if (dna == Dna.Void) dna = Dna.Flesh;
-                var k = Kinds.PreyFor(dna, _rng);
-                float r = pr * (_rng.Chance(0.15f) ? _rng.Range(0.75f, 0.9f) : _rng.Range(0.22f, 0.7f));
-                if (k == Kinds.Shellbit) r *= 0.9f;
-                Spawn(k, pos, r);
+                SpawnPrey(pos, pr);
             }
             else if (preds < predTarget)
             {
@@ -122,6 +118,30 @@ namespace OMX.Game
                 _gulperTimer = 50;
                 var far = Arena.RandomPoint(60, Arena.Radius - 10);
                 Spawn(Kinds.Gulper, new Vector3(far.x, 0, far.y), pr * 0.95f);
+            }
+        }
+
+        void SpawnPrey(Vector3 pos, float pr)
+        {
+            var zone = Arena.ZoneAt(pos);
+            var dna = _rng.Chance(0.62f) ? zone.Primary : _rng.Chance(0.6f) ? zone.Secondary : (Dna)_rng.Range(0, 5);
+            if (dna == Dna.Void) dna = Dna.Flesh;
+            var k = Kinds.PreyFor(dna, _rng);
+            float r = pr * (_rng.Chance(0.15f) ? _rng.Range(0.75f, 0.9f) : _rng.Range(0.22f, 0.7f));
+            if (k == Kinds.Shellbit) r *= 0.9f;
+            Spawn(k, pos, r);
+        }
+
+        /// <summary>Fills the view with food at the start of a run so the first seconds are never empty.</summary>
+        public void Populate(int count)
+        {
+            var pp = Player.transform.position;
+            for (int i = 0; i < count; i++)
+            {
+                float a = _rng.Range(0, Mathf.PI * 2), d = _rng.Range(2.5f, ViewRadius * 1.5f);
+                var p = pp + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * d;
+                if (new Vector2(p.x, p.z).magnitude > Arena.Radius - 6) continue;
+                SpawnPrey(p, Player.Radius);
             }
         }
 
@@ -229,6 +249,7 @@ namespace OMX.Game
                 if (i >= Live.Count) continue;
                 var c = Live[i];
                 c.T += dt;
+                if (c.Age < 0.5f && c.Digest < 0) { c.Age += dt; c.Root.localScale = Vector3.one * c.Radius * 2 * Mathf.SmoothStep(0, 1, Mathf.Min(1, c.Age / 0.5f)); }
                 if (c.Digest >= 0)
                 {
                     c.Digest += dt / 0.22f;

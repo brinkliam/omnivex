@@ -116,7 +116,7 @@ namespace OMX.Game
                 var row = Box(true); row.style.alignItems = Align.Center; row.style.marginBottom = 8;
                 row.style.backgroundColor = new Color(1, 1, 1, 0.04f); Radius(row, 12); Pad(row, 10);
                 var info = Box(); info.style.flexGrow = 1;
-                info.Add(Text($"{u.Name}   {new string('|', lvl)}{new string('.', u.MaxLevel - lvl)}", 20, Palette.Ui, true));
+                info.Add(Text($"{u.Name}   Lv {lvl}/{u.MaxLevel}", 20, Palette.Ui, true));
                 info.Add(Text(u.Blurb, 15, Palette.UiDim));
                 row.Add(info);
                 if (lvl >= u.MaxLevel) row.Add(Chip("MAX", Palette.Accent));
@@ -382,7 +382,6 @@ namespace OMX.Game
                 p.Add(d);
             }
             p.Add(Btn("CONTINUE", Run.LeaveResults, true, 22, 300));
-            p.Add(Text($"Share this pool with seed {r.Seed} (set it in a future build's seed field)", 12, Palette.UiDim, false, TextAnchor.MiddleCenter));
             bg.Add(p);
         }
 
@@ -392,7 +391,7 @@ namespace OMX.Game
         {
             _adLayer.Clear();
             _adLayer.pickingMode = PickingMode.Position;
-            var bg = Centered(); bg.style.backgroundColor = new Color(0.02f, 0.02f, 0.04f, 0.97f);
+            var bg = Centered(); bg.style.backgroundColor = new Color(0.02f, 0.02f, 0.04f, 1f);
             _adLayer.Add(bg);
             bg.Add(Text("TEST AD", 48, Palette.Hex(0xFFE04A), true, TextAnchor.MiddleCenter));
             bg.Add(Text("Development placeholder. No real ad is shown and no money is earned.", 17, Palette.UiDim, false, TextAnchor.MiddleCenter));

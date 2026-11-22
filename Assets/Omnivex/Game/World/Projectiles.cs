@@ -22,8 +22,9 @@ namespace OMX.Game
             _sphere = MeshKit.Blob(10, 7, Color.white, Color.white);
             _acid = Mats.Bio("proj_acid", Palette.Hdr(Palette.Of(Dna.Toxin), 2f), 1.5f, Color.black, 0, 0.12f);
             _acid.SetColor("_EmissionColor", Palette.Hdr(Palette.Of(Dna.Toxin), 2.4f));
-            _spore = Mats.Bio("proj_spore", Palette.Hdr(Palette.Danger, 2f), 1.5f, Color.black, 0, 0.1f);
-            _spore.SetColor("_EmissionColor", Palette.Hdr(Palette.Hex(0xFF6A3A), 2.8f));
+            _spore = Mats.Bio("proj_spore", Palette.Hdr(Palette.Danger, 1.2f), 1.2f, Color.black, 0, 0.1f);
+            _spore.SetColor("_BaseColor", Palette.Danger);
+            _spore.SetColor("_EmissionColor", Palette.Hdr(Palette.Hex(0xFF3A2A), 0.9f));
         }
 
         P Get(Material m)

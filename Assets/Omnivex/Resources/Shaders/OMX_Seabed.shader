@@ -45,14 +45,9 @@ Shader "Omnivex/Seabed"
 
             float Caustic(float2 p, float t)
             {
-                float2 q = p;
-                float c = 0;
-                for (int k = 0; k < 3; k++)
-                {
-                    q += float2(sin(q.y * 1.7 + t * 0.9), cos(q.x * 1.3 - t * 0.7)) * 0.55;
-                    c += abs(sin(q.x + q.y * 0.6));
-                }
-                return pow(saturate(1.6 - c * 0.55), 4);
+                float2 q = p + float2(sin(p.y * 1.3 + t * 0.6), cos(p.x * 1.1 - t * 0.5)) * 0.6;
+                float c = abs(sin(q.x * 2.0 + sin(q.y * 1.6 + t)) + sin(q.y * 2.2 + sin(q.x * 1.4 - t * 0.8)));
+                return pow(saturate(1 - c * 1.6), 5);
             }
 
             half4 frag(V i) : SV_Target
@@ -77,7 +72,7 @@ Shader "Omnivex/Seabed"
 
                 float t = _Time.y;
                 float2 p = i.positionWS.xz * _CausticScale;
-                float c = Caustic(p, t) * 0.65 + Caustic(p * 1.7 + 3.1, t * 1.3) * 0.45;
+                float c = Caustic(p, t) * 0.7 + Caustic(p * 1.9 + 3.1, t * 1.3) * 0.35;
                 col += _CausticColor.rgb * c * sh * saturate(n.y);
                 half zone = i.color.a;
                 col += _ZoneGlow.rgb * zone * (0.55 + 0.45 * sin(t * 1.5 + i.positionWS.x * 0.3 + i.positionWS.z * 0.2));

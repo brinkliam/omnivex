@@ -123,7 +123,7 @@ namespace OMX.Game
             _volume.isGlobal = true; _volume.priority = 10;
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
             var tm = profile.Add<Tonemapping>(true); tm.mode.Override(TonemappingMode.ACES);
-            _bloom = profile.Add<Bloom>(true); _bloom.intensity.Override(0.85f); _bloom.threshold.Override(0.9f); _bloom.scatter.Override(0.72f);
+            _bloom = profile.Add<Bloom>(true); _bloom.intensity.Override(0.6f); _bloom.threshold.Override(1.0f); _bloom.scatter.Override(0.72f);
             _bloom.tint.Override(Color.Lerp(Color.white, Palette.Accent, 0.15f));
             _vig = profile.Add<Vignette>(true); _vig.intensity.Override(0.26f); _vig.smoothness.Override(0.45f); _vig.color.Override(Palette.Abyss);
             _ca = profile.Add<ColorAdjustments>(true); _ca.saturation.Override(14); _ca.contrast.Override(10); _ca.postExposure.Override(0.1f);

@@ -23,6 +23,7 @@ namespace OMX.Game
         public Dna Dna;                   // morsels inherit their victim's DNA
         public float Value;               // biomass override (morsels)
         public bool Elite;
+        public float Age;                 // seconds since spawn (grow-in)
 
         public bool Hostile => Kind.Brain == Brain.Predator || Kind.Brain == Brain.Lancer;
     }

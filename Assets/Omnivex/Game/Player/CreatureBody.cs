@@ -43,21 +43,21 @@ namespace OMX.Game
             var body = Palette.Hex(skin.Body); var glow = Palette.Hex(skin.Glow); var acc = Palette.Hex(skin.Accent);
             _skin ??= Mats.BioUnique("player_skin", glow, 1f, glow, 0.6f, 0.05f);
             _skin.SetColor("_BaseColor", body);
-            _skin.SetColor("_RimColor", Palette.Hdr(glow, 1.4f)); _skin.SetFloat("_Rim", 1.1f);
-            _skin.SetColor("_GlowColor", Palette.Hdr(glow, 3.2f)); _skin.SetFloat("_VeinAmount", 0.5f); _skin.SetFloat("_VeinScale", 3.2f);
+            _skin.SetColor("_RimColor", Palette.Hdr(glow, 1.0f)); _skin.SetFloat("_Rim", 0.55f);
+            _skin.SetColor("_GlowColor", Palette.Hdr(glow, 2.2f)); _skin.SetFloat("_VeinAmount", 0.5f); _skin.SetFloat("_VeinScale", 3.2f);
             _skin.SetFloat("_Gloss", 0.7f); _skin.SetFloat("_Pulse", 3f);
             _accent ??= Mats.BioUnique("player_accent", acc, 1f, acc, 0.5f, 0.02f);
             _accent.SetColor("_BaseColor", acc); _accent.SetColor("_RimColor", Palette.Hdr(acc, 1.2f)); _accent.SetColor("_GlowColor", Palette.Hdr(acc, 2.5f));
             _glowMat ??= Mats.BioUnique("player_glow", glow, 0.5f, glow, 0, 0.08f);
             _glowMat.SetColor("_BaseColor", Color.black); _glowMat.SetColor("_EmissionColor", Palette.Hdr(glow, 4f));
-            _haloMat ??= Mats.Aura(Palette.Hdr(glow, 1.5f));
-            _haloMat.SetColor("_Color", Palette.Hdr(glow, 1.5f));
+            _haloMat ??= Mats.Aura(Palette.Hdr(glow, 0.35f));
+            _haloMat.SetColor("_Color", Palette.Hdr(glow, 0.35f));
 
             if (_core == null)
             {
                 _core = Make("Core", transform, _sphere, _skin, Vector3.zero, Vector3.zero, Vector3.one);
                 _nucleus = Make("Nucleus", _core, _sphere, _glowMat, new Vector3(0, 0.08f, -0.05f), Vector3.zero, Vector3.one * 0.38f);
-                _halo = Make("Halo", transform, _sphere, _haloMat, Vector3.zero, Vector3.zero, Vector3.one * 1.18f);
+                _halo = Make("Halo", transform, _sphere, _haloMat, Vector3.zero, Vector3.zero, Vector3.one * 1.06f, false);
                 _mouthRing = new GameObject("Mouth").transform; _mouthRing.SetParent(_core, false);
                 _mouthRing.localPosition = new Vector3(0, 0, 0.42f);
                 for (int i = 0; i < 8; i++)
@@ -129,14 +129,14 @@ namespace OMX.Game
                         var anchor = new GameObject("tentacle").transform; anchor.SetParent(_parts, false);
                         anchor.localPosition = new Vector3(Mathf.Cos(a) * 0.38f, -0.12f, Mathf.Sin(a) * 0.3f + 0.05f);
                         Grow("tentacles", anchor);
-                        var segs = new Transform[7];
+                        var segs = new Transform[10];
                         for (int s = 0; s < segs.Length; s++)
                         {
-                            float sc = 0.17f * (1 - s / 9f) * (1 + level * 0.12f);
+                            float sc = 0.2f * (1 - s / 12f) * (1 + level * 0.12f);
                             segs[s] = Make("seg", null, _sphere, s % 2 == 0 ? skin : acc, Vector3.zero, Vector3.zero, Vector3.one * sc, false);
                             segs[s].position = anchor.position;
                         }
-                        _chains.Add(new Chain { Anchor = anchor, Segs = segs, SegLen = 0.13f * (1 + level * 0.15f), Phase = a * 3, Amp = 0.6f });
+                        _chains.Add(new Chain { Anchor = anchor, Segs = segs, SegLen = 0.075f * (1 + level * 0.15f), Phase = a * 3, Amp = 0.6f });
                     }
                     break;
                 }
@@ -152,9 +152,10 @@ namespace OMX.Game
                 case "plates":
                     for (int i = 0; i < 5; i++)
                     {
-                        float a = (i - 2) * 26 + level * 9;
-                        var t = Make("plate", _parts, _sphere, acc, Quaternion.Euler(0, a, 0) * new Vector3(0, 0.3f + level * 0.03f, -0.05f - (level - 1) * 0.12f),
-                            new Vector3(-20 - level * 6, a, 0), new Vector3(0.48f, 0.12f, 0.36f));
+                        float yaw = (i - 2) * 34f * Mathf.Deg2Rad;
+                        float pitch = (35 + level * 18) * Mathf.Deg2Rad;
+                        var dir = new Vector3(Mathf.Sin(yaw) * Mathf.Cos(pitch), Mathf.Sin(pitch), -Mathf.Cos(yaw) * Mathf.Cos(pitch)).normalized;
+                        var t = Make("plate", _parts, _sphere, acc, dir * 0.46f, Quaternion.LookRotation(dir).eulerAngles, new Vector3(0.42f, 0.34f, 0.12f));
                         Grow("plates", t);
                     }
                     break;
@@ -196,27 +197,25 @@ namespace OMX.Game
                 }
                 case "bulk":
                 {
-                    var t = Make("bulk", _parts, _sphere, skin, new Vector3(0, 0.05f, -0.22f), Vector3.zero, new Vector3(0.82f, 0.72f, 0.7f) * (1 + level * 0.08f));
+                    var t = Make("bulk", _parts, _sphere, skin, new Vector3(0, 0.22f + level * 0.04f, -0.3f - level * 0.04f), Vector3.zero, new Vector3(0.7f, 0.6f, 0.72f) * (1 + level * 0.1f));
                     Grow("bulk", t);
                     break;
                 }
                 case "acid":
                     for (int i = -1; i <= 1; i += 2)
                     {
-                        var sac = MakeGlowSac(new Vector3(i * 0.36f, 0.08f, -0.12f + level * 0.05f), Palette.Of(Dna.Toxin), 0.22f + level * 0.04f);
+                        var sac = MakeGlowSac(new Vector3(i * 0.46f, 0.1f, -0.12f + level * 0.08f), Palette.Of(Dna.Toxin), 0.24f + level * 0.04f);
                         Grow("acid", sac);
                     }
                     break;
                 case "membrane":
                 {
-                    var t = Make("membrane", _parts, _sphere, _haloMat, Vector3.zero, Vector3.zero, Vector3.one * (1.08f + level * 0.04f), false);
-                    Grow("membrane", t);
-                    for (int i = 0; i < 3; i++) Grow("membrane", Make("frill", _parts, _fin, acc, new Vector3(0, 0.12f, -0.35f), new Vector3(-30, 180 + (i - 1) * 40, 0), new Vector3(0.4f, 0.04f, 0.3f)));
+                                        for (int i = 0; i < 3; i++) Grow("membrane", Make("frill", _parts, _fin, acc, new Vector3(0, 0.12f, -0.35f), new Vector3(-30, 180 + (i - 1) * 40, 0), new Vector3(0.4f, 0.04f, 0.3f)));
                     break;
                 }
                 case "volt":
                 {
-                    var organ = MakeGlowSac(new Vector3(0, 0.36f, -0.18f), Palette.Of(Dna.Volt), 0.26f + level * 0.04f);
+                    var organ = MakeGlowSac(new Vector3(0, 0.5f, -0.15f), Palette.Of(Dna.Volt), 0.28f + level * 0.04f);
                     for (int i = 0; i < 3; i++) Make("coil", organ, _cone, acc, Vector3.zero, new Vector3(-60, i * 120, 0), new Vector3(0.25f, 0.25f, 1.2f));
                     Grow("volt", organ);
                     break;
@@ -299,7 +298,7 @@ namespace OMX.Game
             float bulge = Mathf.Sin(_bulge * Mathf.PI) * 0.18f;
             _core.localScale = new Vector3(1 - stretch * 0.5f + breathe + bulge, 1 - stretch * 0.4f - breathe + bulge * 0.6f, 1 + stretch + bulge * 0.4f);
             _nucleus.localScale = Vector3.one * (0.38f + Mathf.Sin(_t * 3.1f) * 0.03f + _molt * 0.2f);
-            _halo.localScale = Vector3.one * (1.16f + _molt * 0.5f + Mathf.Sin(_t * 1.7f) * 0.02f);
+            _halo.localScale = Vector3.one * (1.06f + _molt * 0.6f + Mathf.Sin(_t * 1.7f) * 0.015f);
             _mouthRing.localScale = Vector3.one * (1 + _bulge * 0.6f);
             _skin.SetFloat("_VeinAmount", 0.45f + _molt * 0.55f + _charge * 0.4f);
             _skin.SetFloat("_Flash", _hitBristle * 0.55f);
@@ -335,7 +334,7 @@ namespace OMX.Game
                     var wave = side * Mathf.Sin(_t * 6 + ch.Phase - i * 0.8f) * ch.Amp * len * (0.4f + Speed01);
                     var want = prev + dir.normalized * len + wave * 0.5f;
                     s.position = want;
-                    s.localScale = Vector3.one * scale * 0.17f * (1 - i / 9f);
+                    s.localScale = Vector3.one * scale * 0.2f * (1 - i / 12f);
                     prev = want;
                 }
             }

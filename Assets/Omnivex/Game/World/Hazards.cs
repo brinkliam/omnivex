@@ -19,6 +19,8 @@ namespace OMX.Game
         public void Build()
         {
             _mpb = new MaterialPropertyBlock();
+            foreach (var old in _vents) if (old.decal != null) Destroy(old.decal.gameObject);
+            _vents.Clear();
             var rng = new Rng(Arena.Seed ^ 0x77);
             foreach (var s in Arena.VentSpots)
             {

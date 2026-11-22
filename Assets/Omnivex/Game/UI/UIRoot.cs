@@ -39,7 +39,6 @@ namespace OMX.Game
 
             _hud = Box(); Fill(_hud); _hud.pickingMode = PickingMode.Ignore; _safe.Add(_hud);
             BuildHud();
-            _screens = Box(); Fill(_screens); _screens.pickingMode = PickingMode.Ignore; _safe.Add(_screens);
             _titles = Centered(); _titles.pickingMode = PickingMode.Ignore; _safe.Add(_titles);
             _bigTitle = Text("", 64, Palette.Ui, true, TextAnchor.MiddleCenter);
             _bigSub = Text("", 22, Palette.UiDim, false, TextAnchor.MiddleCenter);
@@ -48,6 +47,7 @@ namespace OMX.Game
             _titles.style.opacity = 0;
             _toasts = Box(); _toasts.style.position = Position.Absolute; _toasts.style.top = 96; _toasts.style.left = 0; _toasts.style.right = 0;
             _toasts.style.alignItems = Align.Center; _toasts.pickingMode = PickingMode.Ignore; _safe.Add(_toasts);
+            _screens = Box(); Fill(_screens); _screens.pickingMode = PickingMode.Ignore; _safe.Add(_screens);   // menus sit above titles and toasts
             _flash = Box(); Fill(_flash); _flash.pickingMode = PickingMode.Ignore; _root.Add(_flash);
             _adLayer = Box(); Fill(_adLayer); _adLayer.pickingMode = PickingMode.Ignore; _root.Add(_adLayer);
 
@@ -177,13 +177,13 @@ namespace OMX.Game
             _tier.text = Genome.TierNames[g.Tier].ToUpperInvariant();
             float prev = g.PrevThreshold, next = g.NextThreshold;
             _bioFill.style.width = Length.Percent(Mathf.Clamp01((g.BiomassTotal - prev) / Mathf.Max(0.01f, next - prev)) * 100);
-            _bioText.text = $"Biomass {g.BiomassTotal:0}  ·  next evolution {next:0}";
+            _bioText.text = g.BiomassTotal < 10 ? $"Biomass {g.BiomassTotal:0.0}  ·  next evolution {next:0}" : $"Biomass {g.BiomassTotal:0}  ·  next evolution {next:0}";
             _pending.text = g.PendingEvolutions > 0 ? "EVOLVE x" + g.PendingEvolutions : "";
             _pending.style.display = g.PendingEvolutions > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             _hpFill.style.width = Length.Percent(Mathf.Clamp01(Player.Health / Player.MaxHealth) * 100);
             _hpText.text = $"{Mathf.CeilToInt(Player.Health)} / {Mathf.CeilToInt(Player.MaxHealth)}" + (g.Current.Armor > 0.01f ? $"  ·  armour {g.Current.Armor * 100:0}%" : "");
             float sum = 0; foreach (var a in g.Affinity) sum += a;
-            for (int i = 0; i < 6; i++) _dna[i].style.flexGrow = sum > 0 ? g.Affinity[i] / sum : (i == 0 ? 1 : 0);
+            for (int i = 0; i < 6; i++) _dna[i].style.flexGrow = sum > 0 ? g.Affinity[i] / sum : 0;
             _hiddenChip.style.display = Player.Hidden ? DisplayStyle.Flex : DisplayStyle.None;
             _frenzyChip.style.display = Player.FrenzyTime > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             if (Player.FrenzyTime > 0) _frenzyText.text = $"FRENZY {Player.FrenzyTime:0}s";

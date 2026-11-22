@@ -70,6 +70,7 @@ namespace OMX.Game
             Eco.SpawningEnabled = true; Eco.PreyTarget = 40; Eco.PredatorScale = 0.6f;
             Player.BeginRun(new Genome());   // the lair shows a fresh hatchling
             Player.Controllable = false;
+            Eco.Populate(24);
             UI.ShowLair();
             Audio.Intensity = 0;
         }
@@ -87,6 +88,7 @@ namespace OMX.Game
             Player.BeginRun(g);
             Rig.Yaw = 0; Rig.Target = Player.transform; Rig.SnapToTarget(); Rig.Cinematic(Vector3.zero, 10, 0);
             Eco.SpawningEnabled = true; Eco.PreyTarget = 58; Eco.PredatorScale = 1;
+            Eco.Populate(34);
             RerollsLeft = Lab.FreeRerolls(save);
             RevivedThisRun = false; _bossSpawned = false; _bossDone = false; _lastTier = 0; RunTime = 0;
             _evoDelay = g.PendingEvolutions > 0 ? 1.2f : -1; _bossCountdown = -1;
