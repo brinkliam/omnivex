@@ -1,0 +1,11 @@
+{
+    "name": "OMX.Game",
+    "rootNamespace": "OMX.Game",
+    "references": [
+        "OMX.Core",
+        "Unity.InputSystem",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
+    ],
+    "autoReferenced": true
+}

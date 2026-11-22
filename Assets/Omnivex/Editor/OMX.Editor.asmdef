@@ -1,0 +1,11 @@
+{
+    "name": "OMX.Editor",
+    "rootNamespace": "OMX.EditorTools",
+    "references": [
+        "OMX.Core",
+        "OMX.Game",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
+    ],
+    "includePlatforms": ["Editor"]
+}

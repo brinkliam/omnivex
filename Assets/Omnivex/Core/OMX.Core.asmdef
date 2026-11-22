@@ -1,0 +1,7 @@
+{
+    "name": "OMX.Core",
+    "rootNamespace": "OMX.Core",
+    "references": [],
+    "autoReferenced": true,
+    "noEngineReferences": true
+}

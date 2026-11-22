@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#06141a">
+  <title>{{{ PRODUCT_NAME }}}</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #06141a; touch-action: none; overscroll-behavior: none; }
+    #stage { position: fixed; inset: 0; }
+    /* the canvas always fills the window; Unity matches its render size to this box (x devicePixelRatio) */
+    #unity-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #06141a; outline: none; }
+    #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at 50% 40%, #0e3a44 0%, #06141a 70%); color: #e6fffb; font-family: "Segoe UI", Roboto, Helvetica, sans-serif; transition: opacity .6s; }
+    #loading h1 { font-weight: normal; letter-spacing: .35em; font-size: clamp(22px, 5vw, 46px); margin: 0 0 .3em; text-shadow: 0 0 24px rgba(60,242,216,.6); text-align: center; }
+    #loading p { margin: 0 0 1.6em; opacity: .75; letter-spacing: .12em; font-size: clamp(12px, 2.4vw, 16px); text-align: center; padding: 0 16px; }
+    #bar { width: min(360px, 70vw); height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+    #fill { width: 0; height: 100%; background: linear-gradient(90deg, #1f8f86, #3cf2d8); box-shadow: 0 0 12px #3cf2d8; transition: width .2s; }
+    #fs { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(60,242,216,.5);
+      background: rgba(14,16,28,.6) center/22px no-repeat; cursor: pointer; display: none; z-index: 5;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233cf2d8' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5'/%3E%3C/svg%3E"); }
+    #fs:hover { background-color: rgba(20,60,60,.8); }
+    #warning { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); max-width: 90vw; z-index: 6; font: 14px sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <div id="loading">
+      <h1>OMNIVEX</h1>
+      <p>Start as nothing.</p>
+      <div id="bar"><div id="fill"></div></div>
+    </div>
+    <button id="fs" title="Fullscreen" aria-label="Fullscreen"></button>
+    <div id="warning"></div>
+  </div>
+  <script>
+    const stage = document.getElementById("stage");
+    const canvas = document.getElementById("unity-canvas");
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    function showBanner(msg, type) {
+      const w = document.getElementById("warning");
+      const d = document.createElement("div");
+      d.textContent = msg;
+      d.style.cssText = "padding:8px 12px;margin:4px;border-radius:8px;background:" + (type === "error" ? "#b3261e" : "#5a4a1a") + ";color:#fff";
+      w.appendChild(d);
+      if (type !== "error") setTimeout(() => d.remove(), 5000);
+    }
+
+    const config = {
+      arguments: [],
+      dataUrl: "Build/{{{ DATA_FILENAME }}}",
+      frameworkUrl: "Build/{{{ FRAMEWORK_FILENAME }}}",
+      codeUrl: "Build/{{{ CODE_FILENAME }}}",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+      productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+      productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+      showBanner: showBanner,
+      // saves and settings persist across visits without manual syncing
+      autoSyncPersistentDataPath: true,
+      // sharp but affordable: full density on desktop, capped on high-density phones
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2),
+    };
+
+    // The canvas follows the window. On some browsers the canvas keeps a stale size after leaving fullscreen
+    // (a grey screen); nudging its size on every resize and fullscreen change forces Unity to resync.
+    function fit() {
+      canvas.style.width = stage.clientWidth + "px";
+      canvas.style.height = stage.clientHeight + "px";
+      requestAnimationFrame(() => { canvas.style.width = "100%"; canvas.style.height = "100%"; });
+    }
+    window.addEventListener("resize", fit);
+    window.addEventListener("orientationchange", () => setTimeout(fit, 250));
+    document.addEventListener("fullscreenchange", () => setTimeout(fit, 50));
+    document.addEventListener("webkitfullscreenchange", () => setTimeout(fit, 50));
+
+    // Fullscreen on the first click: call the browser API directly inside the click handler.
+    const fsBtn = document.getElementById("fs");
+    const canFs = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+    fsBtn.onclick = (e) => {
+      e.preventDefault();
+      const el = stage;
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      } else {
+        (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: "hide" });
+      }
+      canvas.focus();
+    };
+
+    const script = document.createElement("script");
+    script.src = "Build/{{{ LOADER_FILENAME }}}";
+    script.onload = () => {
+      createUnityInstance(canvas, config, (p) => { document.getElementById("fill").style.width = (100 * p) + "%"; })
+        .then((instance) => {
+          window.unityInstance = instance;
+          const l = document.getElementById("loading");
+          l.style.opacity = 0; setTimeout(() => l.remove(), 700);
+          if (canFs) fsBtn.style.display = "block";
+          fit();
+          canvas.focus();
+        })
+        .catch((m) => showBanner(String(m), "error"));
+    };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>
