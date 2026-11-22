@@ -10,7 +10,7 @@ namespace OMX.Game
     /// </summary>
     public sealed class Hazards : MonoBehaviour
     {
-        public Arena Arena; public Ecosystem Eco; public PlayerCreature Player; public AudioDirector Audio;
+        public WorldBase Arena; public Ecosystem Eco; public PlayerCreature Player; public AudioDirector Audio;
         sealed class Vent { public Vector3 p; public float timer, tele; public Transform decal; public MeshRenderer mr; public Light light; }
         readonly List<Vent> _vents = new List<Vent>();
         const float VentRadius = 2.6f;

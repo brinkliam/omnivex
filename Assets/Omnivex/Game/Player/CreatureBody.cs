@@ -21,7 +21,15 @@ namespace OMX.Game
         readonly List<Chain> _chains = new List<Chain>();
         readonly List<(Transform t, Vector3 baseScale, float born)> _grow = new List<(Transform, Vector3, float)>();
         readonly Dictionary<string, List<Transform>> _byPart = new Dictionary<string, List<Transform>>();
-        Mesh _sphere, _cone, _fin;
+        Mesh _sphere, _cone, _fin, _box;
+        Material _alloy;
+        Material AlloyMat()
+        {
+            if (_alloy != null) return _alloy;
+            _alloy = Mats.Bio("organ_alloy", Palette.Hdr(Palette.Of(Dna.Alloy), 0.8f), 0.8f, Palette.Hdr(Palette.Of(Dna.Alloy), 2f), 0.3f, 0, 0.9f, 2f, 7f);
+            _alloy.SetColor("_BaseColor", Palette.Hex(0x6A6E7A));
+            return _alloy;
+        }
         SkinDef _skinDef;
         float _bulge, _hitBristle, _molt, _t, _charge;
         public Vector3 Velocity;
@@ -33,6 +41,7 @@ namespace OMX.Game
             _sphere = MeshKit.Blob(24, 16, Color.white, new Color(0.5f, 0.55f, 0.6f));
             _cone = MeshKit.Cone(8, new Color(0.75f, 0.75f, 0.8f), Color.white);
             _fin = MeshKit.Cone(5, new Color(0.7f, 0.7f, 0.7f), Color.white, 0.1f);
+            _box = MeshKit.Box(Color.white, new Color(0.6f, 0.6f, 0.65f));
             _parts = new GameObject("Mutations").transform; _parts.SetParent(transform, false);
             ApplySkin(skin);
         }
@@ -253,6 +262,60 @@ namespace OMX.Game
                         Grow("crown", Make("crownHorn", _parts, _cone, _glowMat, new Vector3(Mathf.Cos(a) * 0.26f, 0.4f, Mathf.Sin(a) * 0.26f - 0.05f), new Vector3(-70, -a * Mathf.Rad2Deg + 90, 0), new Vector3(0.08f, 0.08f, 0.42f)));
                     }
                     break;
+                // ---- Stage 2 organs: metal swallowed from the town, grown into the body
+                case "hull":
+                {
+                    var steel = AlloyMat();
+                    for (int i = 0; i < 6; i++)
+                    {
+                        float yaw = (i % 3 - 1) * 40f * Mathf.Deg2Rad, pitch = (i < 3 ? 20 : 55) * Mathf.Deg2Rad;
+                        var dir = new Vector3(Mathf.Sin(yaw) * Mathf.Cos(pitch), Mathf.Sin(pitch), Mathf.Cos(yaw) * Mathf.Cos(pitch) * (i < 3 ? 1 : -1)).normalized;
+                        Grow("hull", Make("hullPlate", _parts, _box, steel, dir * 0.48f, Quaternion.LookRotation(dir).eulerAngles, new Vector3(0.34f, 0.26f, 0.08f) * (1 + level * 0.1f)));
+                    }
+                    break;
+                }
+                case "railspine":
+                {
+                    var steel = AlloyMat();
+                    var rail = Make("rail", _parts, _box, steel, new Vector3(0, 0.52f, -0.05f), Vector3.zero, new Vector3(0.1f, 0.12f, 0.9f + level * 0.15f));
+                    Make("railGlow", rail, _box, _glowMat, new Vector3(0, 0.6f, 0), Vector3.zero, new Vector3(0.6f, 0.3f, 0.95f), false);
+                    for (int i = -1; i <= 1; i += 2) Make("coil", rail, _box, steel, new Vector3(i * 0.9f, 0, 0.2f), Vector3.zero, new Vector3(0.6f, 1.6f, 0.15f));
+                    Grow("railspine", rail);
+                    break;
+                }
+                case "emp":
+                {
+                    var g = MakeGlowSac(new Vector3(0, 0.55f, 0.15f), Palette.Of(Dna.Volt), 0.2f + level * 0.04f);
+                    for (int i = 0; i < 4; i++) Make("prong", g, _cone, AlloyMat(), Vector3.zero, new Vector3(-50, i * 90, 0), new Vector3(0.3f, 0.3f, 1.8f));
+                    Grow("emp", g);
+                    break;
+                }
+                case "crusher":
+                    for (int i = -1; i <= 1; i += 2)
+                        Grow("crusher", Make("crusherJaw", _parts, _cone, AlloyMat(), new Vector3(i * 0.24f, -0.08f, 0.42f), new Vector3(0, i * -25, 0), new Vector3(0.16f, 0.12f, 0.38f + level * 0.08f)));
+                    break;
+                case "stomp":
+                    for (int i = 0; i < 4; i++)
+                    {
+                        float a = (i + 0.5f) / 4f * Mathf.PI * 2;
+                        Grow("stomp", Make("tread", _parts, _sphere, acc, new Vector3(Mathf.Cos(a) * 0.38f, -0.38f, Mathf.Sin(a) * 0.34f), Vector3.zero, new Vector3(0.26f, 0.16f, 0.3f) * (1 + level * 0.12f)));
+                    }
+                    break;
+                case "chameleon":
+                    _skin.SetFloat("_VeinScale", 6f);
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var dir = Fib(i * 5 + 2, 20); if (dir.y < 0.1f) dir.y = 0.3f;
+                        Grow("chameleon", Make("scale", _parts, _sphere, _skin, dir.normalized * 0.47f, Quaternion.LookRotation(dir).eulerAngles, new Vector3(0.22f, 0.22f, 0.06f)));
+                    }
+                    break;
+                case "reactor":
+                {
+                    var core = MakeGlowSac(new Vector3(0, 0.42f, -0.36f), Palette.Warning, 0.32f);
+                    for (int i = 0; i < 6; i++) Make("vent", core, _box, AlloyMat(), Quaternion.Euler(0, i * 60, 0) * new Vector3(0, 0, 0.55f), new Vector3(0, i * 60, 0), new Vector3(0.3f, 0.7f, 0.12f));
+                    Grow("reactor", core);
+                    break;
+                }
             }
         }
 

@@ -29,6 +29,7 @@ namespace OMX.Core
         public List<string> testReceipts = new List<string>(); // test-store product ids (dev only)
         public float bestBiomass;
         public int runs, bossKills, totalKills, bestEvolutions;
+        public int bestStage = 1;
         public string lastDailyUtc = "";
         public int dailyStreak;
         public int seed = 0;               // 0 = random each run

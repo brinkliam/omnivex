@@ -22,6 +22,12 @@ namespace OMX.Game
         float _titleT, _titleDur, _flashA;
         Color _flashC;
         bool _photo;
+        VisualElement _alertBox;
+        readonly VisualElement[] _pips = new VisualElement[5];
+        Label _alertText, _zoneText;
+        Label _stickHint;
+        float _hintSeen;
+        public void ResetStickHint() => _hintSeen = 0;
 
         public void Init()
         {
@@ -88,10 +94,10 @@ namespace OMX.Game
             _hpText = Text("", 13, Palette.UiDim); tl.Add(_hpText);
             _dna = Box(true); _dna.style.height = 8; _dna.style.marginTop = 6; Radius(_dna, 4); _dna.style.overflow = Overflow.Hidden;
             _dna.pickingMode = PickingMode.Ignore;
-            for (int i = 0; i < 6; i++) { var seg = Box(); seg.style.backgroundColor = Palette.Of((Dna)i); seg.style.flexGrow = 0; seg.pickingMode = PickingMode.Ignore; _dna.Add(seg); }
+            for (int i = 0; i < 7; i++) { var seg = Box(); seg.style.backgroundColor = Palette.Of((Dna)i); seg.style.flexGrow = 0; seg.pickingMode = PickingMode.Ignore; _dna.Add(seg); }
             tl.Add(_dna);
             var chips = Box(true); chips.style.marginTop = 8; chips.pickingMode = PickingMode.Ignore;
-            _hiddenChip = Chip("HIDDEN IN KELP", Palette.Of(Dna.Flora)); _hiddenChip.style.marginRight = 6; chips.Add(_hiddenChip);
+            _hiddenChip = Chip("HIDDEN", Palette.Of(Dna.Flora)); _hiddenChip.style.marginRight = 6; chips.Add(_hiddenChip);
             _frenzyChip = Chip("FRENZY", Palette.Of(Dna.Flesh)); chips.Add(_frenzyChip);
             _frenzyText = _frenzyChip.Q<Label>();
             tl.Add(chips);
@@ -110,6 +116,22 @@ namespace OMX.Game
             _bossBox.Add(_bossName);
             var bb = Bar(Palette.Hex(0xFF6AD5), 14, out _bossFill); _bossBox.Add(bb);
             _hud.Add(_bossBox);
+
+            _alertBox = Box(); _alertBox.style.position = Position.Absolute; _alertBox.style.right = 16; _alertBox.style.top = 70;
+            _alertBox.style.alignItems = Align.FlexEnd; _alertBox.pickingMode = PickingMode.Ignore;
+            var pipRow = Box(true); pipRow.style.alignItems = Align.Center; pipRow.pickingMode = PickingMode.Ignore;
+            _alertText = Text("ALERT", 15, Palette.Danger, true); _alertText.style.marginRight = 8;
+            pipRow.Add(_alertText);
+            for (int i = 0; i < 5; i++)
+            {
+                var pip = Box(); pip.style.width = 16; pip.style.height = 16; pip.style.marginLeft = 3; Radius(pip, 4);
+                pip.style.rotate = new Rotate(45); pip.pickingMode = PickingMode.Ignore;
+                _pips[i] = pip; pipRow.Add(pip);
+            }
+            _alertBox.Add(pipRow);
+            _zoneText = Text("", 13, Palette.UiDim, false, TextAnchor.MiddleRight);
+            _alertBox.Add(_zoneText);
+            _hud.Add(_alertBox);
 
             // bottom-right dash button with cooldown fill
             var dash = Box(); dash.style.position = Position.Absolute; dash.style.right = 26; dash.style.bottom = 26;
@@ -130,6 +152,9 @@ namespace OMX.Game
             _knob = Box(); _knob.style.position = Position.Absolute; _knob.style.width = 62; _knob.style.height = 62; Radius(_knob, 31);
             _knob.style.backgroundColor = new Color(Palette.Accent.r, Palette.Accent.g, Palette.Accent.b, 0.55f); _knob.pickingMode = PickingMode.Ignore;
             _hud.Add(_stick); _hud.Add(_knob);
+            _stickHint = Text("DRAG TO SWIM", 18, Palette.Accent, true, TextAnchor.MiddleCenter);
+            _stickHint.style.position = Position.Absolute; _stickHint.style.width = 180;
+            _hud.Add(_stickHint);
 
             _rareArrow = Box(); _rareArrow.style.position = Position.Absolute; _rareArrow.style.width = 0; _rareArrow.style.height = 0;
             _rareArrow.pickingMode = PickingMode.Ignore;
@@ -183,30 +208,49 @@ namespace OMX.Game
             _hpFill.style.width = Length.Percent(Mathf.Clamp01(Player.Health / Player.MaxHealth) * 100);
             _hpText.text = $"{Mathf.CeilToInt(Player.Health)} / {Mathf.CeilToInt(Player.MaxHealth)}" + (g.Current.Armor > 0.01f ? $"  ·  armour {g.Current.Armor * 100:0}%" : "");
             float sum = 0; foreach (var a in g.Affinity) sum += a;
-            for (int i = 0; i < 6; i++) _dna[i].style.flexGrow = sum > 0 ? g.Affinity[i] / sum : 0;
+            for (int i = 0; i < 7; i++) _dna[i].style.flexGrow = sum > 0 ? g.Affinity[i] / sum : 0;
             _hiddenChip.style.display = Player.Hidden ? DisplayStyle.Flex : DisplayStyle.None;
             _frenzyChip.style.display = Player.FrenzyTime > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             if (Player.FrenzyTime > 0) _frenzyText.text = $"FRENZY {Player.FrenzyTime:0}s";
             _dashFill.style.height = Length.Percent(Player.DashCooldown01 * 100);
 
-            _bossBox.style.display = Boss.Active ? DisplayStyle.Flex : DisplayStyle.None;
-            if (Boss.Active)
+            var boss = Run.ActiveBoss;
+            _bossBox.style.display = boss.Active ? DisplayStyle.Flex : DisplayStyle.None;
+            if (boss.Active)
             {
-                _bossName.text = Boss.Title + (Boss.Exposed ? "  -  CORE EXPOSED: BITE!" : Boss.Phase == 2 ? "  -  ENRAGED" : "");
-                _bossName.style.color = Boss.Exposed ? Palette.Accent : Palette.Hex(0xFF9AE0);
-                _bossFill.style.width = Length.Percent(Boss.Hp / Boss.MaxHp * 100);
+                _bossName.text = boss.Title + (boss.Exposed ? "  -  WEAK POINT OPEN: BITE!" : boss.Phase == 2 ? "  -  ENRAGED" : "");
+                _bossName.style.color = boss.Exposed ? Palette.Accent : Palette.Hex(0xFF9AE0);
+                _bossFill.style.width = Length.Percent(boss.Hp / boss.MaxHp * 100);
+            }
+            // town: alert pips and the district name
+            bool town = Run.Stage == 2;
+            _alertBox.style.display = town ? DisplayStyle.Flex : DisplayStyle.None;
+            if (town)
+            {
+                int stars = Run.Military.Stars;
+                for (int i = 0; i < 5; i++) _pips[i].style.backgroundColor = i < stars ? Palette.Danger : new Color(1, 1, 1, 0.15f);
+                _alertText.text = stars == 0 ? "UNNOTICED" : Run.Military.Quiet > 10 ? "COOLING" : "ALERT";
+                _zoneText.text = Run.Town.ZoneName(Player.transform.position).ToUpperInvariant();
             }
 
             // joystick
             var ir = InputRouter.I;
-            bool show = ir.StickActive && _root.panel != null;
-            _stick.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
-            _knob.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
-            if (show)
+            if (_root.panel != null)
             {
-                var o = ToPanel(ir.StickOrigin); var kp = ToPanel(ir.StickPos);
-                _stick.style.left = o.x - 75; _stick.style.top = o.y - 75;
-                _knob.style.left = kp.x - 31; _knob.style.top = kp.y - 31;
+                bool active = ir.StickActive;
+                float pk = _root.layout.height > 0 ? _root.layout.height / Screen.height : 1;
+                float rad = ir.StickRadius * pk, knob = rad * 0.42f;
+                var o = ToPanel(active ? ir.StickOrigin : ir.FixedCenter);
+                var kp = active ? ToPanel(ir.StickOrigin + Vector2.ClampMagnitude(ir.StickPos - ir.StickOrigin, ir.StickRadius)) : o;
+                _stick.style.width = rad * 2; _stick.style.height = rad * 2; Radius(_stick, rad);
+                _knob.style.width = knob * 2; _knob.style.height = knob * 2; Radius(_knob, knob);
+                _stick.style.left = o.x - rad; _stick.style.top = o.y - rad;
+                _knob.style.left = kp.x - knob; _knob.style.top = kp.y - knob;
+                _stick.style.opacity = active ? 1f : 0.55f;
+                _knob.style.opacity = active ? 1f : 0.6f;
+                _stickHint.style.left = o.x - 90; _stickHint.style.top = o.y - rad - 30;
+                if (active || Player.Velocity.sqrMagnitude > 1f) _hintSeen += Time.unscaledDeltaTime;
+                _stickHint.style.display = _hintSeen < 1.5f ? DisplayStyle.Flex : DisplayStyle.None;
             }
 
             // rare-prey compass (Stalk Eyes)
@@ -243,9 +287,9 @@ namespace OMX.Game
             _titleT = 0; _titleDur = duration;
         }
 
-        public void BossIntro(string name)
+        public void BossIntro(string name, string hint)
         {
-            BigTitle(name, "Wait for the slam. When her core opens, bite.", 4f);
+            BigTitle(name, hint, 4f);
             _bigTitle.style.color = Palette.Hex(0xFF9AE0);
             Flash(Palette.Hex(0xFF6AD5), 0.5f);
             _hud.style.display = DisplayStyle.Flex;

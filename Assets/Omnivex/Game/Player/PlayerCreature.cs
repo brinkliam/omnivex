@@ -12,7 +12,7 @@ namespace OMX.Game
     {
         public Genome Genome { get; private set; }
         public CreatureBody Body { get; private set; }
-        public Arena Arena; public Ecosystem Eco; public CameraRig Rig; public AudioDirector Audio;
+        public WorldBase Arena; public Ecosystem Eco; public CameraRig Rig; public AudioDirector Audio;
         public float Radius { get; private set; } = 0.5f;
         public float Health { get; private set; }
         public float MaxHealth => Genome.Current.MaxHealth;
@@ -32,7 +32,9 @@ namespace OMX.Game
         public event Action OnDied;
         public int Kills;
 
-        float _heading, _dashT, _dashCd, _invuln, _voltT, _acidT, _sporeT, _growPulse, _stillT, _toxHint;
+        float _heading, _dashT, _dashCd, _invuln, _voltT, _acidT, _sporeT, _growPulse, _stillT, _toxHint, _cannonT, _empT;
+        bool _wasDashing;
+        public bool Dashing => _dashT > 0;
         Vector3 _vel;
 
         public void Init(SkinDef skin)
@@ -95,6 +97,8 @@ namespace OMX.Game
             Vector2 input = Controllable && IsAlive ? InputRouter.I.Move : Vector2.zero;
             var want = new Vector3(input.x, 0, input.y) * Speed();
             _dashT -= dt; _dashCd -= dt; _invuln -= dt;
+            if (_wasDashing && _dashT <= 0 && s.Quake > 0) Quake(s);
+            _wasDashing = _dashT > 0;
             if (_dashT <= 0)
             {
                 float accel = 1 - Mathf.Exp(-dt * (2.4f + s.Turn * 0.35f));
@@ -119,7 +123,7 @@ namespace OMX.Game
             // stealth: drift slowly inside the kelp and predators lose you
             var zone = Arena.ZoneAt(pos);
             _stillT = _vel.magnitude < Speed() * 0.35f ? _stillT + dt : 0;
-            Hidden = zone.Primary == Dna.Flora && zone != Arena.Shallows && _stillT > 0.6f;
+            Hidden = zone.Cover && _stillT > 0.6f;
 
             if (IsAlive && s.Regen > 0) Health = Mathf.Min(MaxHealth, Health + s.Regen * dt);
             if (FrenzyTime > 0) FrenzyTime -= dt;
@@ -167,6 +171,7 @@ namespace OMX.Game
                         Eco.Damage(c, 18 * s.Volt * (0.6f + Radius * 0.5f));
                     });
                     BossHook?.Invoke(p, range, 18 * s.Volt * (0.6f + Radius * 0.5f));
+                    Arena.DamageStructures(p, range, 12 * s.Volt * Radius);
                     Fx.I.Ring(p, Palette.Hdr(Palette.Of(Dna.Volt), 2.5f), Radius, range, 0.35f, 0.08f);
                     Audio?.Play("zap", 0.6f, 1f + UnityEngine.Random.Range(-0.1f, 0.1f));
                 }
@@ -186,6 +191,36 @@ namespace OMX.Game
                         Projectiles.I.Spit(MouthPoint + Vector3.up * Radius * 0.2f, aim.Value, 14 + Radius * 4, 12 * s.Acid * (0.6f + Radius * 0.5f), Radius * 0.22f);
                         Audio?.Play("spit", 0.5f, 1.1f);
                     }
+                }
+            }
+            // railspine: slugs at the nearest threat, the boss, or the nearest building
+            if (s.Cannon > 0)
+            {
+                _cannonT += dt;
+                if (_cannonT >= Mathf.Max(0.6f, 2.2f / s.Cannon))
+                {
+                    var target = Eco.NearestThreat(p, 14 + Radius * 4);
+                    Vector3? aim = target != null ? target.Pos : BossAim?.Invoke(p, 16 + Radius * 4);
+                    if (!aim.HasValue && Arena is Town town) aim = NearestBuilding(town, p, 10 + Radius * 3);
+                    if (aim.HasValue)
+                    {
+                        _cannonT = 0;
+                        Projectiles.I.Slug(p + Vector3.up * Radius * 0.8f, aim.Value, 30 * s.Cannon * (0.6f + Radius * 0.4f), 0.25f + Radius * 0.08f);
+                        Audio?.Play("zap", 0.45f, 1.6f);
+                    }
+                }
+            }
+            // EMP: stall every vehicle and aircraft nearby
+            if (s.Emp > 0)
+            {
+                _empT += dt;
+                if (_empT >= Mathf.Max(3f, 7f - s.Emp * 1.5f))
+                {
+                    _empT = 0;
+                    float range = Radius * 4 + 6;
+                    Eco.ForEachNear(p, range + 10, (c, d) => { if (c.Kind.Military || c.Kind == Kinds.Car) { c.Stun = 2.5f + s.Emp; Eco.Damage(c, 10 * s.Emp); } });
+                    Fx.I.Ring(p, Palette.Hdr(Palette.Of(Dna.Volt), 3f), Radius, range, 0.5f, 0.06f);
+                    Audio?.Play("zap", 0.8f, 0.6f);
                 }
             }
             // spores / crown: allies hatch on their own
@@ -211,6 +246,7 @@ namespace OMX.Game
             if (!IsAlive || !Controllable) return;
             var k = c.Kind;
             if (k.Brain == Brain.Ally) return;
+            if (k.Altitude > 0 && Radius < k.Altitude * 0.35f) return;   // can't reach flyers until you're tall enough
             bool edible = k.Brain == Brain.Morsel || c.Radius < Radius * k.EatRatio;
             float mouthDist = (c.Pos - MouthPoint).magnitude;
             if (edible && (mouthDist < MouthRadius + c.Radius * 0.6f || dist < Radius * 0.9f))
@@ -270,6 +306,50 @@ namespace OMX.Game
             if (unlocked > 0) OnEvolutionReady?.Invoke(Genome.PendingEvolutions);
         }
 
+        static Vector3? NearestBuilding(Town town, Vector3 p, float range)
+        {
+            Building best = null; float bd = range * range;
+            foreach (var b in town.Buildings)
+            {
+                if (!b.Standing || b.Tree) continue;
+                float d = (new Vector2(p.x, p.z) - b.C).sqrMagnitude;
+                if (d < bd) { bd = d; best = b; }
+            }
+            return best == null ? (Vector3?)null : new Vector3(best.C.x, 1, best.C.y);
+        }
+
+        void Quake(Stats s)
+        {
+            float range = Radius * (2.5f + s.Quake);
+            Fx.I.Ring(transform.position, Palette.Hdr(Palette.Of(Dna.Mineral), 3f), Radius * 0.5f, range, 0.6f, 0.08f);
+            Fx.I.Burst(transform.position, new Color(0.5f, 0.48f, 0.5f, 1), 14, 6, Radius * 0.4f, 1f, true);
+            Rig.Shake(0.3f); Rig.Punch(-0.05f);
+            Audio?.Play("slam", 0.7f, 1.3f);
+            Arena.DamageStructures(transform.position, range, 60 * s.Quake * Radius);
+            Eco.ForEachNear(transform.position, range, (c, d) => { if (c.Hostile || c.Kind == Kinds.Car) { c.Stun = 1.2f; Eco.Damage(c, 25 * s.Quake); } });
+            BossHook?.Invoke(transform.position, range, 40 * s.Quake);
+        }
+
+        /// <summary>Swallow a piece of scenery (a tree, a building's remains) for biomass.</summary>
+        public void Consume(float value, Dna dna, Vector3 at, float bulge)
+        {
+            int unlocked = Genome.Feed(value, dna, FrenzyTime > 0 ? 1.5f : 1f);
+            Fx.I.Absorb(at, MouthPoint, Palette.Hdr(Palette.Of(dna), 2.2f), 8, Radius * 0.4f);
+            Body.Swallow(bulge);
+            _growPulse = Mathf.Min(1, _growPulse + 0.3f);
+            Audio?.Gulp(0.5f, false);
+            if (unlocked > 0) OnEvolutionReady?.Invoke(Genome.PendingEvolutions);
+        }
+
+        public void Heal(float fraction) { Health = Mathf.Min(MaxHealth, Health + MaxHealth * fraction); }
+
+        public void PlaceAt(Vector3 p)
+        {
+            _vel = Vector3.zero;
+            transform.position = new Vector3(p.x, Arena.HeightAt(p.x, p.z) + Radius, p.z);
+            _heading = 0;
+        }
+
         public void FeedFromAlly(Critter victim)
         {
             float value = Genome.ValueOf(victim.Radius) * 0.6f;
@@ -282,6 +362,7 @@ namespace OMX.Game
         public void TakeDamage(float amount, Vector3 from, bool ignoreInvuln = false)
         {
             if (!IsAlive || (_invuln > 0 && !ignoreInvuln)) return;
+            if (_dashT > 0 && !ignoreInvuln) { Fx.I.Burst(transform.position, Palette.Hdr(Palette.Accent, 2f), 4, 3, Radius * 0.2f, 0.3f); return; }   // dashing slips through
             float dmg = amount * (1 - Genome.Current.Armor);
             Health -= dmg;
             _invuln = 0.45f;

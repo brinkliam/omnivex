@@ -10,6 +10,7 @@ namespace OMX.Game
         public Dna Primary, Secondary;
         public Color Tint;
         public float Danger;   // 0..1, scales predator density
+        public bool Cover;     // dense enough to hide in (kelp, town parks)
     }
 
     public struct Obstacle { public Vector2 p; public float r; }
@@ -18,28 +19,25 @@ namespace OMX.Game
     /// Seeded tide-pool generator. Five feeding grounds around a central trench; the zone you hunt in decides your diet,
     /// so geography is an evolutionary choice. Static scenery is merged into a handful of meshes.
     /// </summary>
-    public sealed class Arena : MonoBehaviour
+    public sealed class Arena : WorldBase
     {
         public const float Radius = 82f;
-        public int Seed { get; private set; }
-        public readonly List<Obstacle> Obstacles = new List<Obstacle>();
-        public readonly List<Vector2> VentSpots = new List<Vector2>();
+        public override float Bound => Radius - 4;
         readonly Zone[] _zones = new Zone[5];
         float _zoneRot;
         public Zone Shallows { get; private set; }
         public Zone Abyss { get; private set; }
-        Rng _rng;
 
         public static readonly Zone[] Templates =
         {
-            new Zone { Name = "Kelp Thicket", Primary = Dna.Flora, Secondary = Dna.Flesh, Tint = Palette.Hex(0x1E4A3A), Danger = 0.35f },
+            new Zone { Name = "Kelp Thicket", Primary = Dna.Flora, Secondary = Dna.Flesh, Tint = Palette.Hex(0x1E4A3A), Danger = 0.35f, Cover = true },
             new Zone { Name = "Crystal Shelf", Primary = Dna.Mineral, Secondary = Dna.Volt, Tint = Palette.Hex(0x1C3656), Danger = 0.45f },
             new Zone { Name = "Vent Field", Primary = Dna.Volt, Secondary = Dna.Toxin, Tint = Palette.Hex(0x3A2A2A), Danger = 0.7f },
             new Zone { Name = "Bloom Reef", Primary = Dna.Flesh, Secondary = Dna.Flora, Tint = Palette.Hex(0x3A2140), Danger = 0.5f },
             new Zone { Name = "Rot Garden", Primary = Dna.Toxin, Secondary = Dna.Flesh, Tint = Palette.Hex(0x2A1E44), Danger = 0.55f },
         };
 
-        public void Build(int seed)
+        public override void Build(int seed)
         {
             Seed = seed;
             _rng = new Rng(seed);
@@ -56,7 +54,7 @@ namespace OMX.Game
             BuildLights();
         }
 
-        public Zone ZoneAt(Vector3 p)
+        public override Zone ZoneAt(Vector3 p)
         {
             float d = new Vector2(p.x, p.z).magnitude;
             if (d < 20) return Shallows;
@@ -69,7 +67,7 @@ namespace OMX.Game
         public Vector3 ZoneCenter(int i) { float a = (_zoneRot + 36 + i * 72) * Mathf.Deg2Rad; return new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * 44f; }
         public Zone ZoneByIndex(int i) => _zones[i];
 
-        public float HeightAt(float x, float z)
+        public override float HeightAt(float x, float z)
         {
             float d = Mathf.Sqrt(x * x + z * z);
             float h = (Mathf.PerlinNoise(x * 0.045f + Seed * 0.13f, z * 0.045f) - 0.5f) * 1.6f;
@@ -77,14 +75,6 @@ namespace OMX.Game
             h -= Mathf.Exp(-d * d / 90f) * 1.2f;                     // central trench (the Matriarch's nest)
             if (d > Radius - 6) h += Mathf.Pow((d - (Radius - 6)) * 0.42f, 2);   // rim rises into the cliffs
             return h;
-        }
-
-        public Vector3 Clamp(Vector3 p, float margin)
-        {
-            var flat = new Vector2(p.x, p.z);
-            float max = Radius - 4 - margin;
-            if (flat.magnitude > max) { flat = flat.normalized * max; p.x = flat.x; p.z = flat.y; }
-            return p;
         }
 
         void BuildFloor()
@@ -271,32 +261,5 @@ namespace OMX.Game
             var cl = core.AddComponent<Light>(); cl.type = LightType.Point; cl.range = 22; cl.intensity = 2.5f; cl.color = Palette.Accent;
         }
 
-        public Vector2 RandomPoint(float minR, float maxR)
-        {
-            float a = _rng.Range(0, Mathf.PI * 2);
-            float d = Mathf.Sqrt(_rng.Range(minR * minR, maxR * maxR));
-            return new Vector2(Mathf.Cos(a) * d, Mathf.Sin(a) * d);
-        }
-
-        public bool BlockedByRock(Vector2 p, float r)
-        {
-            foreach (var o in Obstacles) if ((o.p - p).sqrMagnitude < (o.r + r) * (o.r + r)) return true;
-            return false;
-        }
-
-        /// <summary>Pushes a circle out of boulders and keeps it inside the pool. Returns the corrected position.</summary>
-        public Vector3 Resolve(Vector3 pos, float r)
-        {
-            var p = new Vector2(pos.x, pos.z);
-            foreach (var o in Obstacles)
-            {
-                var d = p - o.p; float min = o.r + r * 0.7f;
-                float sq = d.sqrMagnitude;
-                if (sq < min * min && sq > 0.0001f) p = o.p + d.normalized * min;
-            }
-            float max = Radius - 4 - r;
-            if (p.magnitude > max) p = p.normalized * max;
-            return new Vector3(p.x, pos.y, p.y);
-        }
     }
 }

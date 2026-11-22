@@ -10,7 +10,7 @@ namespace OMX.Game
     {
         public bool Cleared, BossKilled;
         public float Biomass, Seconds;
-        public int Kills, Evolutions, Essence, Tier;
+        public int Kills, Evolutions, Essence, Tier, Stage = 1, Buildings;
         public string Build;
         public List<string> Mutations = new List<string>();
         public bool Doubled;
@@ -26,6 +26,12 @@ namespace OMX.Game
         public ServicesHub Services;
         public PlayerCreature Player; public Ecosystem Eco; public Arena Arena; public Hazards Hazards;
         public Matriarch Boss; public CameraRig Rig; public AudioDirector Audio; public UIRoot UI; public Projectiles Proj;
+        public Town Town; public Military Military; public Bastion Bastion;
+        public System.Action<int> OnStageChanged;
+        /// <summary>1 = the tide pool, 2 = Harrowgate.</summary>
+        public int Stage { get; private set; } = 1;
+        public IBoss ActiveBoss => Stage == 2 ? (IBoss)Bastion : Boss;
+        int _buildingsDestroyed;
         public RunState State { get; private set; } = RunState.Lair;
         public float RunTime { get; private set; }
         public int RerollsLeft { get; private set; }
@@ -49,12 +55,85 @@ namespace OMX.Game
             Player.OnAte += OnAte;
             Player.OnDied += OnDied;
             Eco.OnKilled += c => { Player.Kills++; };
-            Boss.OnIntroDone += () => { if (State == RunState.BossIntro) { State = RunState.Playing; Player.Controllable = true; } };
+            Boss.OnIntroDone += IntroDone;
+            Bastion.OnIntroDone += IntroDone;
             Boss.OnDefeated += OnBossDefeated;
-            Player.BossHook = (p, r, dmg) => { if (Boss.Active && (p - Boss.transform.position).magnitude < r + Boss.Radius * 0.6f) Boss.Damage(dmg); };
-            Player.BossAim = (p, range) => Boss.AimPoint(p, range);
-            Proj.HitBoss = (p, r, dmg) => Boss.HitTest(p, r, dmg);
+            Bastion.OnDefeated += OnBastionDefeated;
+            Player.BossHook = (p, r, dmg) => { var b = ActiveBoss; if (b.Active && (p - b.Position).magnitude < r + b.Radius * 0.6f) b.Damage(dmg); };
+            Player.BossAim = (p, range) => ActiveBoss.AimPoint(p, range);
+            Proj.HitBoss = (p, r, dmg) => ActiveBoss.HitTest(p, r, dmg);
+            Town.OnDestroyed += b =>
+            {
+                Military.OnBuilding(b);
+                if (b.Tree) return;
+                _buildingsDestroyed++;
+                Services.Ads.NotifyGameplay();
+                if (_seenThisSave.Add("b:" + b.Kind)) { Services.Save.codex.Add("b:" + b.Kind); UI.Toast(b.Kind.ToUpperInvariant() + " DEVOURED", MutationCatalog.DnaName(b.Dna) + " biomass spills out", Palette.Of(b.Dna)); }
+            };
+            Town.Toast = kind => UI.Toast("TOO SOLID", "Grow bigger to break the " + kind, Palette.UiDim);
+            Military.OnStarsChanged = stars => { if (stars > 0 && State == RunState.Playing) UI.Toast(new string('*', stars) + "  ALERT", StarText(stars), Palette.Danger); };
             foreach (var c in Services.Save.codex) _seenThisSave.Add(c);
+        }
+
+        void IntroDone() { if (State == RunState.BossIntro) { State = RunState.Playing; Player.Controllable = true; } }
+
+        static string StarText(int s) => s switch
+        {
+            1 => "Patrol cars are on their way.", 2 => "Rifle squads deployed.", 3 => "Gunships in the air.",
+            4 => "Siege tanks rolling out of Fort Harrow.", _ => "Hunter drones released. Hide or fight.",
+        };
+
+        // ------------------------------------------------------------------ stages
+
+        /// <summary>Put the player, ecosystem, projectiles and mood into the pool or the town.</summary>
+        void SetStage(int stage)
+        {
+            Stage = stage;
+            bool town = stage == 2;
+            Arena.gameObject.SetActive(!town); Hazards.gameObject.SetActive(!town);
+            Town.gameObject.SetActive(town);
+            WorldBase world = town ? (WorldBase)Town : Arena;
+            Eco.Arena = world; Player.Arena = world; Proj.Arena = world;
+            Eco.Stage = stage;
+            if (!town) Military.End();
+            OnStageChanged?.Invoke(stage);
+        }
+
+        void EnterStage2()
+        {
+            Boss.Despawn(); Proj.ClearAll(); Eco.Clear();
+            Town.Clear();
+            Town.Build(Seed);
+            SetStage(2);
+            Player.Genome.Flags.Add("stage2");
+            Player.PlaceAt(Town.PlayerStart);
+            Player.Heal(1f);
+            Rig.Yaw = 0; Rig.Cinematic(Player.transform.position, 20, 0); Rig.SnapToTarget();
+            Eco.SpawningEnabled = true; Eco.PreyTarget = 46;
+            Eco.Populate(30);
+            Military.Begin();
+            _bossSpawned = false; _bossDone = false; _bossCountdown = -1; _buildingsDestroyed = 0;
+            State = RunState.Playing;
+            Player.Controllable = true;
+            UI.ShowHud();
+            UI.Flash(Color.white, 1f);
+            UI.BigTitle("STAGE 2 - HARROWGATE", "You crawl out of the gutter. The town has never seen anything like you.", 4.5f);
+            Audio.Play("sting", 1f, 0.6f);
+            if (Services.Save.bestStage < 2) Services.Save.bestStage = 2;
+            Services.Persist();
+            Services.Analytics.Track("stage_start", ("stage", "2"), ("t", RunTime.ToString("0")), ("biomass", Player.Genome.BiomassTotal.ToString("0")));
+        }
+
+        /// <summary>Dev: skip straight to the town with a grown creature (F11 with ?dev=1).</summary>
+        public void DevJumpToStage2()
+        {
+            if (State != RunState.Playing || Stage != 1) return;
+            var rng = new Rng(5);
+            while (Player.Genome.Tier < 5) Player.Genome.Feed(20, (Dna)rng.Range(0, 5));
+            while (Player.Genome.PendingEvolutions > 0) { var o = Evolution.Offer(Player.Genome, rng); if (o.Count == 0) Player.Genome.SkipEvolution(); else Player.Genome.Apply(o[0].Id); }
+            Player.Mutated();
+            _lastTier = Player.Genome.Tier;
+            EnterStage2();
         }
 
         // ------------------------------------------------------------------ flow
@@ -64,9 +143,10 @@ namespace OMX.Game
             Time.timeScale = 1;
             State = RunState.Lair;
             Player.Controllable = false;
-            Boss.Despawn();
+            Boss.Despawn(); Bastion.Despawn();
             Proj.ClearAll();
             Eco.Clear();
+            SetStage(1);
             Eco.SpawningEnabled = true; Eco.PreyTarget = 40; Eco.PredatorScale = 0.6f;
             Player.BeginRun(new Genome());   // the lair shows a fresh hatchling
             Player.Controllable = false;
@@ -80,7 +160,9 @@ namespace OMX.Game
             var save = Services.Save;
             Seed = save.seed != 0 ? save.seed : Random.Range(1, 999999);
             if (Arena.Seed != Seed) RebuildArena(Seed);
-            Eco.Clear(); Proj.ClearAll(); Boss.Despawn();
+            SetStage(1);
+            Eco.Clear(); Proj.ClearAll(); Boss.Despawn(); Bastion.Despawn();
+            _buildingsDestroyed = 0;
             var g = new Genome();
             g.SetBonus(Lab.BonusFor(save));
             if (save.LabLevel("primer") > 0) g.GrantEvolution();
@@ -94,7 +176,7 @@ namespace OMX.Game
             _evoDelay = g.PendingEvolutions > 0 ? 1.2f : -1; _bossCountdown = -1;
             Player.Controllable = true;
             State = RunState.Playing;
-            UI.ShowHud();
+            UI.ShowHud(); UI.ResetStickHint();
             UI.BigTitle("VIRETH TIDEPOOL", "Eat what is smaller. Flee what is not.", 3f);
             Audio.Play("sting", 0.6f, 1.2f);
             Services.Analytics.Track("run_start", ("seed", Seed.ToString()), ("run", save.runs.ToString()));
@@ -122,10 +204,11 @@ namespace OMX.Game
                 if (tier > _lastTier) { _lastTier = tier; TierUp(tier); }
                 if (_evoDelay < 0 && State == RunState.Playing && Player.Genome.PendingEvolutions > 0 && Player.IsAlive) _evoDelay = 0.6f;
                 if (_evoDelay >= 0 && State == RunState.Playing) { _evoDelay -= dt; if (_evoDelay < 0) OpenEvolution(); }
-                if (!_bossSpawned && tier >= 4 && _bossCountdown < 0)
+                if (!_bossSpawned && tier >= (Stage == 2 ? 8 : 4) && _bossCountdown < 0)
                 {
                     _bossCountdown = 4f;
-                    UI.BigTitle("THE TRENCH STIRS", "Something enormous is waking in the centre of the pool.", 3.5f);
+                    if (Stage == 2) UI.BigTitle("FORT HARROW OPENS ITS GATES", "Something with legs is marching out of the base.", 3.5f);
+                    else UI.BigTitle("THE TRENCH STIRS", "Something enormous is waking in the centre of the pool.", 3.5f);
                     Audio.Play("roar", 0.5f, 0.6f);
                     Rig.Shake(0.4f);
                 }
@@ -134,7 +217,7 @@ namespace OMX.Game
                     _bossCountdown -= dt;
                     if (_bossCountdown < 0) SpawnBoss();
                 }
-                Audio.Intensity = Mathf.MoveTowards(Audio.Intensity, Boss.Active ? 2 : Threat, dt * 0.6f);
+                Audio.Intensity = Mathf.MoveTowards(Audio.Intensity, ActiveBoss.Active ? 2 : Mathf.Max(Threat, Stage == 2 ? Mathf.Min(1, Military.Stars * 0.3f) : 0), dt * 0.6f);
             }
             if (State == RunState.Dying)
             {
@@ -146,7 +229,7 @@ namespace OMX.Game
                 _clearT += Time.unscaledDeltaTime;
                 float u = Mathf.Clamp01(_clearT / 6f);
                 Rig.Cinematic(Player.transform.position, Mathf.Lerp(20, 170, u * u), 1, Mathf.Lerp(55, 86, u));
-                if (_clearT > 7.5f) FinishRun(true);
+                if (_clearT > 7.5f) { if (Stage == 1) EnterStage2(); else FinishRun(true); }
             }
         }
 
@@ -181,12 +264,16 @@ namespace OMX.Game
             2 => "Your shadow scares the shallows.",
             3 => "Predators think twice.",
             4 => "Nothing in this pool is bigger than you. Almost nothing.",
-            _ => "Apex.",
+            5 => "Apex of the pool. The rim is within reach.",
+            6 => "Houses are snacks. Cars are mints.",
+            7 => "The skyline is starting to look edible.",
+            _ => "Harrowgate is yours. Fort Harrow knows it.",
         };
 
         void OnAte(Critter c, float value)
         {
             Services.Ads.NotifyGameplay();
+            if (Stage == 2) Military.OnAte(c);
             string key = "c:" + c.Kind.Id;
             if (c.Kind.Brain != Brain.Morsel && c.Kind.Brain != Brain.Ally && _seenThisSave.Add(key))
             {
@@ -203,10 +290,11 @@ namespace OMX.Game
         {
             if (Player.Genome.PendingEvolutions <= 0) return;
             _offer = Evolution.Offer(Player.Genome, _offerRng, 3, Lab.RareLuck(Services.Save));
-            if (Player.Genome.Flags.Contains("matriarch_infection") && Player.Genome.CanTake(MutationCatalog.Get("crown")) && !_offer.Exists(m => m.Id == "crown"))
-            {
-                if (_offer.Count >= 3) _offer[0] = MutationCatalog.Get("crown"); else _offer.Insert(0, MutationCatalog.Get("crown"));
-            }
+            foreach (var gift in new[] { ("matriarch_infection", "crown"), ("bastion_core", "reactor") })
+                if (Player.Genome.Flags.Contains(gift.Item1) && Player.Genome.CanTake(MutationCatalog.Get(gift.Item2)) && !_offer.Exists(m => m.Id == gift.Item2))
+                {
+                    if (_offer.Count >= 3) _offer[0] = MutationCatalog.Get(gift.Item2); else _offer.Insert(0, MutationCatalog.Get(gift.Item2));
+                }
             if (_offer.Count == 0) { Player.Genome.SkipEvolution(); return; }
             State = RunState.Evolving;
             Time.timeScale = 0;
@@ -265,12 +353,21 @@ namespace OMX.Game
         void SpawnBoss()
         {
             _bossSpawned = true;
+            if (Stage == 2)
+            {
+                Bastion.Summon(Player.Radius);
+                State = RunState.BossIntro;
+                Player.Controllable = false;
+                UI.BossIntro(Bastion.Title, "Dash through the beam and the shockwave. Bite the reactor when it overheats.");
+                Services.Analytics.Track("boss_start", ("stage", "2"), ("t", RunTime.ToString("0")));
+                return;
+            }
             Eco.ForEachNear(Vector3.zero, 26, (c, d) => { if (c.Kind.Brain != Brain.Ally) { c.Vel = c.Pos.normalized * 14; } });
             Eco.PreyTarget = 34; Eco.PredatorScale = 0.25f;
             Boss.Summon(Player.Radius);
             State = RunState.BossIntro;
             Player.Controllable = false;
-            UI.BossIntro(Boss.Title);
+            UI.BossIntro(Boss.Title, "Wait for the slam. When her core opens, bite.");
             Services.Analytics.Track("boss_start", ("t", RunTime.ToString("0")), ("biomass", Player.Genome.BiomassTotal.ToString("0")));
         }
 
@@ -289,6 +386,21 @@ namespace OMX.Game
             _evoDelay = 3.2f;
         }
 
+        void OnBastionDefeated()
+        {
+            _bossDone = true;
+            Services.Save.bossKills++;
+            Military.End();
+            Player.Genome.Flags.Add("bastion_core");
+            Player.Genome.GrantEvolution();
+            UI.BigTitle("THE BASTION FALLS", "Its reactor is still warm. You swallow it whole.", 3.5f);
+            Audio.Play("sting", 1f, 0.55f);
+            UI.Flash(Palette.Warning, 0.8f);
+            Services.Analytics.Track("boss_defeated", ("stage", "2"), ("t", RunTime.ToString("0")));
+            Services.Persist();
+            _evoDelay = 3.2f;
+        }
+
         void BeginStageClear()
         {
             State = RunState.StageClear;
@@ -296,7 +408,8 @@ namespace OMX.Game
             Player.Controllable = false;
             Eco.SpawningEnabled = false;
             UI.ShowHud(false);
-            UI.BigTitle("VIRETH TIDEPOOL CONSUMED", "The pool is a puddle. Beyond its rim, a world of giants waits.", 6f);
+            if (Stage == 1) UI.BigTitle("VIRETH TIDEPOOL CONSUMED", "The pool is a puddle in a gutter. Above it, a town of giants waits.", 6f);
+            else UI.BigTitle("HARROWGATE CONSUMED", "The town is rubble. The sky above it is next. (Stage 3 is in development.)", 6f);
             Audio.Intensity = 0;
         }
 
@@ -307,7 +420,7 @@ namespace OMX.Game
             State = RunState.Dying;
             _dyingT = 0;
             Player.Controllable = false;
-            Services.Analytics.Track("death", ("tier", Player.Genome.Tier.ToString()), ("t", RunTime.ToString("0")), ("boss", Boss.Active ? "1" : "0"));
+            Services.Analytics.Track("death", ("tier", Player.Genome.Tier.ToString()), ("t", RunTime.ToString("0")), ("boss", ActiveBoss.Active ? "1" : "0"), ("stage", Stage.ToString()));
             bool canRevive = !RevivedThisRun && Services.Ads.CanShow(Placements.SecondChance, out _);
             UI.ShowRevive(canRevive);
         }
@@ -318,7 +431,7 @@ namespace OMX.Game
             {
                 RevivedThisRun = true;
                 Time.timeScale = 1;
-                State = Boss.Active ? RunState.Playing : RunState.Playing;
+                State = RunState.Playing;
                 Player.Revive(0.5f);
                 Player.Controllable = true;
                 Projectiles.I.ClearHostile();
@@ -338,11 +451,11 @@ namespace OMX.Game
             Rig.Cinematic(Player.transform.position, 20, 0);
             var g = Player.Genome;
             var save = Services.Save;
-            int essence = Payout.Essence(g.BiomassTotal, Player.Kills, g.Evolutions, _bossDone, cleared);
+            int essence = Payout.Essence(g.BiomassTotal, Player.Kills, g.Evolutions, Stage == 2 || _bossDone, cleared) + (Stage == 2 ? 40 + _buildingsDestroyed + (_bossDone ? 60 : 0) : 0);
             var r = new RunResult
             {
                 Cleared = cleared, BossKilled = _bossDone, Biomass = g.BiomassTotal, Seconds = RunTime, Kills = Player.Kills,
-                Evolutions = g.Evolutions, Essence = essence, Tier = g.Tier, Build = g.BuildTitle, Seed = Seed,
+                Evolutions = g.Evolutions, Essence = essence, Tier = g.Tier, Build = g.BuildTitle, Seed = Seed, Stage = Stage, Buildings = _buildingsDestroyed,
             };
             foreach (var kv in g.Levels) r.Mutations.Add(MutationCatalog.Get(kv.Key).Name + (kv.Value > 1 ? " " + Roman(kv.Value) : ""));
             LastResult = r;

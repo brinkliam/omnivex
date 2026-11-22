@@ -40,6 +40,7 @@ namespace OMX.Game
             Dna.Mineral => Hex(0x7FD6FF),
             Dna.Volt => Hex(0xFFE04A),
             Dna.Toxin => Hex(0xB25CFF),
+            Dna.Alloy => Hex(0xFF9A4A),
             _ => Hex(0x8C5CFF),
         };
 

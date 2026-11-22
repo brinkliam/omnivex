@@ -17,6 +17,7 @@ Shader "Omnivex/Bio"
         _Flash ("Hit Flash", Range(0,1)) = 0
         _Dissolve ("Digest", Range(0,1)) = 0
         [HDR] _EmissionColor ("Flat Emission", Color) = (0,0,0,0)
+        [HDR] _WindowGlow ("Vertex-alpha glow (windows)", Color) = (0,0,0,0)
     }
     SubShader
     {
@@ -26,7 +27,7 @@ Shader "Omnivex/Bio"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
         CBUFFER_START(UnityPerMaterial)
             half4 _BaseColor; half4 _GlowColor; half _VeinAmount; half _VeinScale; half _Pulse; half _Wobble; half _WobbleSpeed;
-            half4 _RimColor; half _Rim; half _Gloss; half _Flash; half _Dissolve; half4 _EmissionColor;
+            half4 _RimColor; half _Rim; half _Gloss; half _Flash; half _Dissolve; half4 _EmissionColor; half4 _WindowGlow;
         CBUFFER_END
         half4 _OMX_AmbSky; half4 _OMX_AmbGround;
 
@@ -115,6 +116,7 @@ Shader "Omnivex/Bio"
                     col += _GlowColor.rgb * 0.08 * _VeinAmount * wave;
                 }
                 col += _EmissionColor.rgb;
+                col += i.color.rgb * _WindowGlow.rgb * i.color.a;
                 col = lerp(col, half3(3, 3, 3), _Flash);
                 if (_Dissolve > 0.001) col += _GlowColor.rgb * 2 * _Dissolve;
                 col = MixFog(col, i.fog);

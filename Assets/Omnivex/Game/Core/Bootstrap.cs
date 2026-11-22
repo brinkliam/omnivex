@@ -70,12 +70,22 @@ namespace OMX.Game
             hazards.Build();
 
             var proj = new GameObject("Projectiles").AddComponent<Projectiles>();
-            proj.Eco = _eco; proj.Player = _player; proj.Arena = _arena;
+            proj.Eco = _eco; proj.Player = _player; proj.Arena = _arena; proj.Audio = audio; proj.Rig = _rig;
             proj.Init();
 
             _boss = new GameObject("Matriarch").AddComponent<Matriarch>();
             _boss.Player = _player; _boss.Eco = _eco; _boss.Rig = _rig; _boss.Audio = audio; _boss.Arena = _arena;
             _boss.Build();
+
+            // Stage 2: the town, its military and its boss (built lazily when the run reaches them)
+            var town = new GameObject("Harrowgate").AddComponent<Town>();
+            town.Player = _player; town.Eco = _eco; town.Rig = _rig; town.Audio = audio;
+            town.gameObject.SetActive(false);
+            var military = new GameObject("Military").AddComponent<Military>();
+            military.Eco = _eco; military.Player = _player; military.Town = town; military.Audio = audio;
+            var bastion = new GameObject("Bastion").AddComponent<Bastion>();
+            bastion.Player = _player; bastion.Eco = _eco; bastion.Rig = _rig; bastion.Audio = audio; bastion.Town = town;
+            bastion.Build();
 
             _ui = new GameObject("UI").AddComponent<UIRoot>();
             _ui.Run = _run; _ui.Services = services; _ui.Player = _player; _ui.Boss = _boss; _ui.Rig = _rig; _ui.Audio = audio; _ui.Eco = _eco;
@@ -83,6 +93,8 @@ namespace OMX.Game
 
             _run.Player = _player; _run.Eco = _eco; _run.Arena = _arena; _run.Hazards = hazards; _run.Boss = _boss;
             _run.Rig = _rig; _run.Audio = audio; _run.UI = _ui; _run.Proj = proj;
+            _run.Town = town; _run.Military = military; _run.Bastion = bastion;
+            _run.OnStageChanged = ApplyMood;
             _run.Init();
 
             int q = services.Save.settings.quality;
@@ -114,6 +126,37 @@ namespace OMX.Game
             RenderSettings.skybox = null;
             Shader.SetGlobalColor("_OMX_AmbSky", Palette.AmbSky * 0.9f);
             Shader.SetGlobalColor("_OMX_AmbGround", Palette.AmbGround);
+        }
+
+        /// <summary>Stage moods. 1: cold surface light over a teal abyss. 2: Harrowgate at dusk, sodium lamps and lit windows.</summary>
+        void ApplyMood(int stage)
+        {
+            if (stage == 2)
+            {
+                _sun.color = Palette.Hex(0xB8C4FF); _sun.intensity = 0.75f;
+                _sun.transform.rotation = Quaternion.Euler(48, 140, 0);
+                RenderSettings.ambientSkyColor = Palette.Hex(0x3A3466);
+                RenderSettings.ambientEquatorColor = Palette.Hex(0x2A2440);
+                RenderSettings.ambientGroundColor = Palette.Hex(0x14101C);
+                RenderSettings.fogColor = Palette.Hex(0x1C1430);
+                Shader.SetGlobalColor("_OMX_AmbSky", Palette.Hex(0x3A3466));
+                Shader.SetGlobalColor("_OMX_AmbGround", Palette.Hex(0x1A1420));
+                _rig.Cam.backgroundColor = Palette.Hex(0x120C20);
+                _ca.saturation.value = 10; _ca.postExposure.value = 0.25f;
+            }
+            else
+            {
+                _sun.color = Palette.KeyLight; _sun.intensity = 1.05f;
+                _sun.transform.rotation = Quaternion.Euler(62, -35, 0);
+                RenderSettings.ambientSkyColor = Palette.AmbSky;
+                RenderSettings.ambientEquatorColor = Color.Lerp(Palette.AmbSky, Palette.AmbGround, 0.5f);
+                RenderSettings.ambientGroundColor = Palette.AmbGround;
+                RenderSettings.fogColor = Palette.Fog;
+                Shader.SetGlobalColor("_OMX_AmbSky", Palette.AmbSky * 0.9f);
+                Shader.SetGlobalColor("_OMX_AmbGround", Palette.AmbGround);
+                _rig.Cam.backgroundColor = Palette.Abyss;
+                _ca.saturation.value = 14; _ca.postExposure.value = 0.1f;
+            }
         }
 
         void BuildVolume()
@@ -191,7 +234,8 @@ namespace OMX.Game
             if (kb == null || _player.Genome == null) return;
             if (kb.f9Key.wasPressedThisFrame) { _player.Genome.Feed(25, Dna.Flesh); Debug.Log("[OMX] dev +25 biomass"); }
             if (kb.f8Key.wasPressedThisFrame) _player.Revive(1f);
-            if (kb.f10Key.wasPressedThisFrame) { while (_player.Genome.Tier < 4) _player.Genome.Feed(20, Dna.Flora); Debug.Log("[OMX] dev: grown to boss tier"); }
+            if (kb.f10Key.wasPressedThisFrame) { int target = _run.Stage == 2 ? 8 : 4; while (_player.Genome.Tier < target) _player.Genome.Feed(20, _run.Stage == 2 ? Dna.Alloy : Dna.Flora); Debug.Log("[OMX] dev: grown to boss tier"); }
+            if (kb.f11Key.wasPressedThisFrame) { _run.DevJumpToStage2(); Debug.Log("[OMX] dev: jumped to stage 2"); }
         }
     }
 }

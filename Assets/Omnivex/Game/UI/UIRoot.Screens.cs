@@ -360,7 +360,8 @@ namespace OMX.Game
             _hud.style.display = DisplayStyle.None;
             var bg = Modal(0.7f);
             var p = Panel(26); p.style.alignItems = Align.Center; p.style.width = Length.Percent(92); p.style.maxWidth = 640;
-            p.Add(Text(r.Cleared ? "POOL CONSUMED" : "DISSOLVED", 42, r.Cleared ? Palette.Accent : Palette.Danger, true, TextAnchor.MiddleCenter));
+            p.Add(Text(r.Cleared ? (r.Stage == 2 ? "HARROWGATE CONSUMED" : "POOL CONSUMED") : "DISSOLVED", 42, r.Cleared ? Palette.Accent : Palette.Danger, true, TextAnchor.MiddleCenter));
+            p.Add(Text(r.Stage == 2 ? "Stage 2 - The Monster" : "Stage 1 - The Parasite", 15, Palette.UiDim, false, TextAnchor.MiddleCenter));
             p.Add(Text(r.Build, 22, Palette.Ui, true, TextAnchor.MiddleCenter));
             p.Add(Spacer(8));
             var grid = Box(true); grid.style.flexWrap = Wrap.Wrap; grid.style.justifyContent = Justify.Center;
@@ -370,7 +371,8 @@ namespace OMX.Game
             Stat("EVOLUTIONS", r.Evolutions.ToString());
             Stat("SIZE", Genome.TierNames[r.Tier]);
             Stat("TIME", $"{(int)r.Seconds / 60}:{(int)r.Seconds % 60:00}");
-            Stat("SEED", r.Seed.ToString());
+            if (r.Stage == 2) Stat("TOPPLED", r.Buildings.ToString());
+            else Stat("SEED", r.Seed.ToString());
             p.Add(grid);
             p.Add(Text(r.Mutations.Count > 0 ? string.Join(" · ", r.Mutations) : "No mutations", 14, Palette.UiDim, false, TextAnchor.MiddleCenter));
             p.Add(Spacer(12));

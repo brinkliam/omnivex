@@ -22,7 +22,26 @@ namespace OMX.Game
 
         int _touchId = -1;
         bool _mouseDown;
-        float StickRadius => Mathf.Max(60f, Screen.dpi > 0 ? Screen.dpi * 0.42f : 70f);
+        public float StickRadius => Mathf.Clamp(Screen.dpi > 0 ? Screen.dpi * 0.5f : Mathf.Min(Screen.width, Screen.height) * 0.11f, 56f, 220f);
+
+        /// <summary>The always-visible thumbstick in the lower-left corner (screen pixels). Pressing near it uses it as a
+        /// fixed stick; pressing anywhere else spawns a floating stick under the finger.</summary>
+        public Vector2 FixedCenter
+        {
+            get
+            {
+                var sa = Screen.safeArea;
+                float r = StickRadius;
+                return new Vector2(sa.xMin + r * 1.55f, sa.yMin + r * 1.55f);
+            }
+        }
+        public bool UsingFixed { get; private set; }
+
+        Vector2 BeginStick(Vector2 pos)
+        {
+            UsingFixed = (pos - FixedCenter).magnitude < StickRadius * 1.5f;
+            return UsingFixed ? FixedCenter : pos;
+        }
 
         void Awake() => I = this;
 
@@ -52,7 +71,7 @@ namespace OMX.Game
             }
 
             var ts = Touchscreen.current;
-            if (ts != null && ts.touches.Count > 0)
+            if (ts != null && (_touchId >= 0 || ts.primaryTouch.press.isPressed))
             {
                 bool found = false;
                 foreach (var t in ts.touches)
@@ -63,7 +82,7 @@ namespace OMX.Game
                     if (phase == UnityEngine.InputSystem.TouchPhase.Began)
                     {
                         if (BlockedByUi != null && BlockedByUi(pos)) continue;
-                        if (_touchId < 0) { _touchId = id; StickOrigin = pos; }
+                        if (_touchId < 0) { _touchId = id; StickOrigin = BeginStick(pos); }
                         else if (id != _touchId && Enabled) OnDash?.Invoke();   // a second finger tap dashes
                     }
                     if (id == _touchId)
@@ -80,7 +99,7 @@ namespace OMX.Game
                 if (m != null)
                 {
                     var pos = m.position.ReadValue();
-                    if (m.leftButton.wasPressedThisFrame && !(BlockedByUi != null && BlockedByUi(pos))) { _mouseDown = true; StickOrigin = pos; }
+                    if (m.leftButton.wasPressedThisFrame && !(BlockedByUi != null && BlockedByUi(pos))) { _mouseDown = true; StickOrigin = BeginStick(pos); }
                     if (!m.leftButton.isPressed) _mouseDown = false;
                     if (_mouseDown) { StickPos = pos; stick = true; }
                     if (Enabled && m.rightButton.wasPressedThisFrame) OnDash?.Invoke();
@@ -91,7 +110,7 @@ namespace OMX.Game
             {
                 var d = StickPos - StickOrigin;
                 float r = StickRadius;
-                if (d.magnitude > r) StickOrigin = StickPos - d.normalized * r;   // the base trails the finger
+                if (d.magnitude > r && !UsingFixed) StickOrigin = StickPos - d.normalized * r;   // a floating base trails the finger
                 var v = (StickPos - StickOrigin) / r;
                 if (v.magnitude > 0.12f) move = v;
             }

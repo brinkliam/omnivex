@@ -22,7 +22,7 @@ namespace OMX.Core
     public sealed class Genome
     {
         public readonly Dictionary<string, int> Levels = new Dictionary<string, int>();
-        public readonly float[] Affinity = new float[6];
+        public readonly float[] Affinity = new float[7];
         public readonly HashSet<string> Flags = new HashSet<string>();
         public float BiomassTotal { get; private set; }
         public int Evolutions { get; private set; }
@@ -35,7 +35,7 @@ namespace OMX.Core
         // ----------------------------------------------------------------- growth
 
         /// <summary>Biomass needed for the n-th evolution (1-based). Gentle power curve, never exponential.</summary>
-        public static float EvolutionThreshold(int n) => n <= 0 ? 0 : (float)(4.0 * Math.Pow(n, 1.6));
+        public static float EvolutionThreshold(int n) => n <= 0 ? 0 : (float)(4.0 * Math.Pow(n, 1.6) * (n > 12 ? Math.Pow(n / 12.0, 0.6) : 1.0));
 
         /// <summary>Creature radius from total biomass. Cube-root-ish so mass feels like volume.</summary>
         public static float RadiusFor(float biomass) => 0.5f * (float)Math.Pow(1.0 + biomass / 8.0, 0.42);
@@ -47,8 +47,8 @@ namespace OMX.Core
         public float NextThreshold => EvolutionThreshold(ThresholdsCrossed + 1);
         public float PrevThreshold => EvolutionThreshold(ThresholdsCrossed);
 
-        public static readonly string[] TierNames = { "Speck", "Mite", "Grub", "Hunter", "Brute", "Apex" };
-        static readonly float[] TierAt = { 0, 10, 40, 100, 200, 320 };
+        public static readonly string[] TierNames = { "Speck", "Mite", "Grub", "Hunter", "Brute", "Apex", "Ravager", "Behemoth", "Colossus" };
+        static readonly float[] TierAt = { 0, 10, 40, 100, 200, 320, 500, 760, 1100 };
         public int Tier { get { int t = 0; for (int i = 0; i < TierAt.Length; i++) if (BiomassTotal >= TierAt[i]) t = i; return t; } }
         public static float TierThreshold(int tier) => TierAt[Math.Max(0, Math.Min(TierAt.Length - 1, tier))];
 
@@ -161,7 +161,7 @@ namespace OMX.Core
                 float w = RarityWeight(m.Rarity) * (m.Rarity == Rarity.Common ? 1f : 1f + rareLuck);
                 w *= 0.35f + 3.0f * g.Share(m.Dna);          // you are what you eat
                 if (g.Level(m.Id) > 0) w *= 1.25f;           // deepen what you have
-                if (m.RequiresFlag != null) w *= 40f;          // a freshly unlocked infection is always on the table
+                if (m.RequiresFlag != null && m.Rarity == Rarity.Legendary) w *= 40f;          // a freshly unlocked infection is always on the table
                 pool.Add(m); weights.Add(w);
             }
             var picks = new List<MutationDef>();

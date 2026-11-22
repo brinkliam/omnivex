@@ -24,14 +24,17 @@ namespace OMX.Game
         public float Value;               // biomass override (morsels)
         public bool Elite;
         public float Age;                 // seconds since spawn (grow-in)
+        public float Stun;                // EMP / quake: no thinking while > 0
+        public float Tint;                // per-instance variety
 
-        public bool Hostile => Kind.Brain == Brain.Predator || Kind.Brain == Brain.Lancer;
+        public bool Hostile => Kind.Brain == Brain.Predator || Kind.Brain == Brain.Lancer || Kind.Military;
     }
 
     /// <summary>Builds critter bodies from primitives. Silhouette first: every kind reads when filled flat black.</summary>
     public static class CritterFactory
     {
-        static Mesh _sphere, _lump, _cone, _fin, _frond;
+        static Mesh _sphere, _lump, _cone, _fin, _frond, _box;
+        static Mesh Boxy => _box ??= MeshKit.Box(Color.white, new Color(0.6f, 0.6f, 0.65f));
         static Mesh Sphere => _sphere ??= MeshKit.Blob(14, 10, Color.white, new Color(0.55f, 0.55f, 0.6f));
         static Mesh Lump => _lump ??= MeshKit.Blob(12, 9, Color.white, new Color(0.5f, 0.5f, 0.55f), 0.7f, 3);
         static Mesh ConeM => _cone ??= MeshKit.Cone(7, new Color(0.8f, 0.8f, 0.8f), Color.white);
@@ -147,6 +150,64 @@ namespace OMX.Game
                     var s = Part(seg.transform, Sphere, body, Vector3.zero, Vector3.zero, Vector3.one, i % 2 == 0 ? Palette.Hex(0x3A3410) : col);
                     c.Segments[i] = seg.transform;
                 }
+            }
+            else if (k == Kinds.Townsfolk)
+            {
+                var cloth = Mats.Bio("cloth", Color.black, 0.2f, Color.black, 0, 0, 0.3f);
+                Part(c.Root, Sphere, cloth, new Vector3(0, -0.1f, 0), Vector3.zero, new Vector3(0.55f, 0.8f, 0.45f), Color.white);
+                Part(c.Root, Sphere, Mats.Bio("skin", Color.black, 0.2f, Color.black, 0, 0, 0.3f), new Vector3(0, 0.42f, 0.02f), Vector3.zero, Vector3.one * 0.36f, Palette.Hex(0xE0B49A));
+            }
+            else if (k == Kinds.Car || k == Kinds.Police)
+            {
+                var paint = Mats.Bio("carpaint", Palette.Hdr(Color.white, 0.3f), 0.5f, Color.black, 0, 0, 0.9f);
+                var box = Boxy;
+                Part(c.Root, box, paint, new Vector3(0, -0.1f, 0), Vector3.zero, new Vector3(0.85f, 0.32f, 1.7f), k == Kinds.Police ? Palette.Hex(0x1A2A4A) : Color.white);
+                Part(c.Root, box, paint, new Vector3(0, 0.18f, -0.1f), Vector3.zero, new Vector3(0.7f, 0.28f, 0.85f), Palette.Hex(0x22283A));
+                var wheel = Mats.Bio("wheel", Color.black, 0, Color.black, 0, 0, 0.2f);
+                for (int i = 0; i < 4; i++) Part(c.Root, Sphere, wheel, new Vector3(i < 2 ? -0.43f : 0.43f, -0.28f, i % 2 == 0 ? 0.55f : -0.55f), Vector3.zero, new Vector3(0.14f, 0.3f, 0.3f), Palette.Hex(0x111111));
+                var lamp = Mats.Bio("headlamp", Color.black, 0, Color.black, 0, 0, 1f); lamp.SetColor("_EmissionColor", Palette.Hdr(Palette.Hex(0xFFF2C8), 3f));
+                Part(c.Root, Sphere, lamp, new Vector3(0.28f, -0.05f, 0.86f), Vector3.zero, Vector3.one * 0.14f, Color.white);
+                Part(c.Root, Sphere, lamp, new Vector3(-0.28f, -0.05f, 0.86f), Vector3.zero, Vector3.one * 0.14f, Color.white);
+                if (k == Kinds.Police)
+                {
+                    var red = Mats.Bio("siren_r", Color.black, 0, Color.black, 0, 0, 1f); red.SetColor("_EmissionColor", Palette.Hdr(Palette.Danger, 4f));
+                    var blue = Mats.Bio("siren_b", Color.black, 0, Color.black, 0, 0, 1f); blue.SetColor("_EmissionColor", Palette.Hdr(Palette.Hex(0x3A7BFF), 4f));
+                    c.JawL = Part(c.Root, box, red, new Vector3(0.15f, 0.36f, -0.1f), Vector3.zero, new Vector3(0.22f, 0.1f, 0.14f), Color.white);
+                    c.JawR = Part(c.Root, box, blue, new Vector3(-0.15f, 0.36f, -0.1f), Vector3.zero, new Vector3(0.22f, 0.1f, 0.14f), Color.white);
+                }
+            }
+            else if (k == Kinds.Soldier)
+            {
+                var drab = Mats.Bio("drab", Color.black, 0.2f, Color.black, 0, 0, 0.2f);
+                Part(c.Root, Sphere, drab, new Vector3(0, -0.1f, 0), Vector3.zero, new Vector3(0.55f, 0.8f, 0.45f), Palette.Hex(0x4A5A34));
+                Part(c.Root, Sphere, drab, new Vector3(0, 0.42f, 0), Vector3.zero, new Vector3(0.42f, 0.3f, 0.42f), Palette.Hex(0x3A4428));
+                c.Glow = Part(c.Root, Boxy, drab, new Vector3(0.22f, 0.05f, 0.4f), Vector3.zero, new Vector3(0.08f, 0.08f, 0.6f), Palette.Hex(0x222222));
+            }
+            else if (k == Kinds.Heli)
+            {
+                var hull = Mats.Bio("helihull", Palette.Hdr(Color.white, 0.25f), 0.4f, Color.black, 0, 0, 0.7f);
+                Part(c.Root, Sphere, hull, Vector3.zero, Vector3.zero, new Vector3(0.6f, 0.55f, 1.1f), Palette.Hex(0x3A4430));
+                Part(c.Root, Boxy, hull, new Vector3(0, 0.05f, -0.95f), Vector3.zero, new Vector3(0.12f, 0.12f, 1.1f), Palette.Hex(0x3A4430));
+                c.Tail = Part(c.Root, Boxy, hull, new Vector3(0, 0.38f, 0), Vector3.zero, new Vector3(2.6f, 0.03f, 0.14f), Palette.Hex(0x222222));
+                var red = Mats.Bio("heli_light", Color.black, 0, Color.black, 0, 0, 1f); red.SetColor("_EmissionColor", Palette.Hdr(Palette.Danger, 5f));
+                Part(c.Root, Sphere, red, new Vector3(0, -0.28f, 0.2f), Vector3.zero, Vector3.one * 0.14f, Color.white);
+            }
+            else if (k == Kinds.Tank)
+            {
+                var armor = Mats.Bio("tankarmor", Palette.Hdr(Color.white, 0.2f), 0.4f, Color.black, 0, 0, 0.4f);
+                Part(c.Root, Boxy, armor, new Vector3(0, -0.15f, 0), Vector3.zero, new Vector3(0.9f, 0.32f, 1.1f), Palette.Hex(0x4A5238));
+                Part(c.Root, Boxy, armor, new Vector3(0.48f, -0.22f, 0), Vector3.zero, new Vector3(0.16f, 0.26f, 1.15f), Palette.Hex(0x222222));
+                Part(c.Root, Boxy, armor, new Vector3(-0.48f, -0.22f, 0), Vector3.zero, new Vector3(0.16f, 0.26f, 1.15f), Palette.Hex(0x222222));
+                c.JawL = Part(c.Root, Boxy, armor, new Vector3(0, 0.12f, -0.05f), Vector3.zero, new Vector3(0.55f, 0.22f, 0.6f), Palette.Hex(0x56603E));
+                Part(c.JawL, Boxy, armor, new Vector3(0, 0, 0.95f), Vector3.zero, new Vector3(0.16f, 0.18f, 1.3f), Palette.Hex(0x3A4028));
+            }
+            else if (k == Kinds.Drone)
+            {
+                var body2 = Mats.Bio("dronebody", Palette.Hdr(Palette.Of(Dna.Volt), 1f), 0.8f, Color.black, 0, 0, 0.8f);
+                Part(c.Root, Sphere, body2, Vector3.zero, Vector3.zero, new Vector3(0.7f, 0.35f, 0.7f), Palette.Hex(0x30303A));
+                var eye2 = Mats.Bio("drone_eye", Color.black, 0, Color.black, 0, 0, 1f); eye2.SetColor("_EmissionColor", Palette.Hdr(Palette.Danger, 5f));
+                Part(c.Root, Sphere, eye2, new Vector3(0, 0, 0.32f), Vector3.zero, Vector3.one * 0.18f, Color.white);
+                c.Tail = Part(c.Root, Boxy, body2, new Vector3(0, 0.22f, 0), Vector3.zero, new Vector3(1.3f, 0.03f, 0.1f), Palette.Hex(0x222222));
             }
             else if (k == Kinds.Gulper)
             {

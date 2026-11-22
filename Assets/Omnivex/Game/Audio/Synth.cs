@@ -200,6 +200,15 @@ namespace OMX.Game
             return Clip("hiss", d, false, 0.55f);
         }
 
+        /// <summary>A distant rifle crack: a noise transient with a short low thump.</summary>
+        public static AudioClip Gun()
+        {
+            var d = Buf(0.25f); var r = new R(43);
+            for (int i = 0; i < d.Length; i++) { float t = i / (float)Rate; d[i] = r.N() * Mathf.Exp(-t * 45) + Mathf.Sin(t * Tau * 90) * Mathf.Exp(-t * 20) * 0.6f; }
+            HighPass(d, 200);
+            return Clip("gun", d, false, 0.6f);
+        }
+
         public static AudioClip Blip(string name, float f, float len, float peak)
         {
             var d = Buf(len); float ph = 0;

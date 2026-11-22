@@ -79,13 +79,31 @@ namespace OMX.Tests
             Assert.IsTrue(g.Apply("crown"));
         }
 
+        [Test] public void TownMutationsUnlockOnlyInStage2()
+        {
+            var g = new Genome();
+            var rng = new Rng(9);
+            for (int i = 0; i < 200; i++) Assert.IsFalse(Evolution.Offer(g, rng).Any(m => m.RequiresFlag == "stage2"));
+            g.Flags.Add("stage2");
+            g.Feed(80, Dna.Alloy);
+            int alloy = 0;
+            for (int i = 0; i < 200; i++) alloy += Evolution.Offer(g, rng).Count(m => m.Dna == Dna.Alloy);
+            Assert.Greater(alloy, 100, "an Alloy diet surfaces Alloy mutations once the town is reached");
+        }
+
+        [Test] public void LateEvolutionsSpaceOut()
+        {
+            for (int n = 13; n < 30; n++) Assert.Greater(Genome.EvolutionThreshold(n) - Genome.EvolutionThreshold(n - 1), Genome.EvolutionThreshold(12) - Genome.EvolutionThreshold(11));
+        }
+
         [Test] public void EveryMutationHasAPartAndARealEffect()
         {
             foreach (var m in MutationCatalog.All)
             {
                 Assert.IsFalse(string.IsNullOrEmpty(m.Part), m.Id + " has no body part");
                 var s = m.PerLevel;
-                float sum = Math.Abs(s.Speed) + Math.Abs(s.Turn) + s.Reach + s.Biomass + s.Armor + s.MaxHealth + s.Regen + s.Thorns + s.Lure + s.Dash + s.Volt + s.Acid + s.Gravity + s.Spores + s.Sight + s.Bite;
+                float sum = Math.Abs(s.Speed) + Math.Abs(s.Turn) + s.Reach + s.Biomass + s.Armor + s.MaxHealth + s.Regen + s.Thorns + s.Lure + s.Dash + s.Volt + s.Acid + s.Gravity + s.Spores + s.Sight + s.Bite
+                    + s.Cannon + s.Emp + s.Demolish + s.Quake + s.Stealth;
                 Assert.Greater(sum, 0, m.Id + " changes no stat");
             }
         }
@@ -132,7 +150,8 @@ namespace OMX.Tests
         [Test] public void OffersShrinkGracefullyWhenNearlyEverythingIsMaxed()
         {
             var g = new Genome();
-            foreach (var m in MutationCatalog.All) { g.Flags.Add("matriarch_infection"); for (int i = 0; i < m.MaxLevel; i++) g.Apply(m.Id); }
+            g.Flags.Add("matriarch_infection"); g.Flags.Add("stage2"); g.Flags.Add("bastion_core");
+            foreach (var m in MutationCatalog.All) for (int i = 0; i < m.MaxLevel; i++) g.Apply(m.Id);
             Assert.AreEqual(0, Evolution.Offer(g, new Rng(1)).Count);
         }
 

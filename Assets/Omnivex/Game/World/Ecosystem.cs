@@ -11,7 +11,7 @@ namespace OMX.Game
     /// </summary>
     public sealed class Ecosystem : MonoBehaviour
     {
-        public Arena Arena;
+        public WorldBase Arena;
         public PlayerCreature Player;
         public readonly List<Critter> Live = new List<Critter>();
         readonly Dictionary<string, Stack<Critter>> _pool = new Dictionary<string, Stack<Critter>>();
@@ -20,6 +20,9 @@ namespace OMX.Game
         float _spawnTimer, _gulperTimer = 40f;
         public bool SpawningEnabled = true;
         public float PreyTarget = 58, PredatorScale = 1f;
+        public int Stage = 1;
+        static readonly uint[] Clothes = { 0xD4574A, 0x4A7AD4, 0xE0C04A, 0x5AB46A, 0xB45AD4, 0xE08A4A, 0xDADADA };
+        static readonly uint[] Paints = { 0xC23A3A, 0x3A6AC2, 0xE0E0E0, 0x2A2A30, 0xE0B03A, 0x3AA07A };
         public event Action<Critter> OnKilled;          // by the player's weapons
         public int Allies { get; private set; }
 
@@ -36,11 +39,18 @@ namespace OMX.Game
             c.Pos = Arena.Resolve(pos, radius); c.Pos.y = Arena.HeightAt(c.Pos.x, c.Pos.z) + radius * 0.9f;
             c.Vel = Vector3.zero; c.Heading = _rng.Range(0, 360f); c.Wander = _rng.Range(0, 100f);
             c.T = _rng.Range(0, 10f); c.Cooldown = _rng.Range(0.5f, 2f); c.State = 0; c.StateTimer = 0; c.Flash = 0;
-            c.Alive = true; c.Digest = -1; c.Dna = k.Dna; c.Value = 0; c.Life = k.Brain == Brain.Ally ? 45f : k.Brain == Brain.Morsel ? 30f : -1; c.Elite = false;
+            c.Alive = true; c.Digest = -1; c.Dna = k.Dna; c.Value = k.Value; c.Stun = 0; c.Life = k.Brain == Brain.Ally ? 45f : k.Brain == Brain.Morsel ? 30f : -1; c.Elite = false;
             c.Age = 0;
             c.Root.position = c.Pos; c.Root.localScale = Vector3.zero;
             if (c.Segments != null) for (int i = 0; i < c.Segments.Length; i++) { c.Segments[i].position = c.Pos; c.Segments[i].localScale = Vector3.one * (0.75f - i * 0.08f); }
             SetFx(c, 0, 0);
+            if (k == Kinds.Townsfolk || k == Kinds.Car)
+            {
+                var rd = c.Renderers[0];
+                rd.GetPropertyBlock(_mpb);
+                _mpb.SetColor("_BaseColor", Palette.Hex(k == Kinds.Car ? Paints[_rng.Range(0, Paints.Length)] : Clothes[_rng.Range(0, Clothes.Length)]));
+                rd.SetPropertyBlock(_mpb);
+            }
             Live.Add(c);
             if (k.Brain == Brain.Ally) Allies++;
             return c;
@@ -82,6 +92,7 @@ namespace OMX.Game
         void Director(float dt)
         {
             if (!SpawningEnabled || Player == null) return;
+            if (Stage == 2) { TownDirector(dt); return; }
             _spawnTimer -= dt;
             if (_spawnTimer > 0) return;
             _spawnTimer = 0.12f;
@@ -116,9 +127,31 @@ namespace OMX.Game
             else if (tier >= 1 && gulpers < 1 && (_gulperTimer -= 1.2f) <= 0)
             {
                 _gulperTimer = 50;
-                var far = Arena.RandomPoint(60, Arena.Radius - 10);
+                var far = Arena.RandomPoint(60, Arena.Bound - 6);
                 Spawn(Kinds.Gulper, new Vector3(far.x, 0, far.y), pr * 0.95f);
             }
+        }
+
+        /// <summary>Harrowgate's civilians and traffic. The military is spawned by the Military director.</summary>
+        void TownDirector(float dt)
+        {
+            _spawnTimer -= dt;
+            if (_spawnTimer > 0) return;
+            _spawnTimer = 0.1f;
+            int civ = 0;
+            foreach (var c in Live) if (c.Kind == Kinds.Townsfolk || c.Kind == Kinds.Car) civ++;
+            if (civ >= PreyTarget) return;
+            var pos = SpawnPoint();
+            SpawnTownsfolk(pos);
+        }
+
+        void SpawnTownsfolk(Vector3 pos)
+        {
+            var zone = Arena.ZoneAt(pos);
+            bool car = zone.Primary == Dna.Alloy || zone.Primary == Dna.Volt ? _rng.Chance(0.6f) : _rng.Chance(0.28f);
+            if (car) { Spawn(Kinds.Car, pos, Kinds.Car.Size); return; }
+            int n = _rng.Range(2, 5);
+            for (int i = 0; i < n; i++) Spawn(Kinds.Townsfolk, pos + new Vector3(_rng.Range(-1.5f, 1.5f), 0, _rng.Range(-1.5f, 1.5f)), Kinds.Townsfolk.Size * _rng.Range(0.9f, 1.15f));
         }
 
         void SpawnPrey(Vector3 pos, float pr)
@@ -140,8 +173,8 @@ namespace OMX.Game
             {
                 float a = _rng.Range(0, Mathf.PI * 2), d = _rng.Range(2.5f, ViewRadius * 1.5f);
                 var p = pp + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * d;
-                if (new Vector2(p.x, p.z).magnitude > Arena.Radius - 6) continue;
-                SpawnPrey(p, Player.Radius);
+                if (new Vector2(p.x, p.z).magnitude > Arena.Bound - 2) continue;
+                if (Stage == 2) SpawnTownsfolk(p); else SpawnPrey(p, Player.Radius);
             }
         }
 
@@ -153,9 +186,9 @@ namespace OMX.Game
                 float a = _rng.Range(0, Mathf.PI * 2);
                 float d = ViewRadius * _rng.Range(1.05f, 1.7f);
                 var p = pp + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * d;
-                if (new Vector2(p.x, p.z).magnitude < Arena.Radius - 6) return p;
+                if (new Vector2(p.x, p.z).magnitude < Arena.Bound - 2) return p;
             }
-            var q = Arena.RandomPoint(8, Arena.Radius - 8);
+            var q = Arena.RandomPoint(8, Arena.Bound - 4);
             return new Vector3(q.x, 0, q.y);
         }
 
@@ -175,7 +208,7 @@ namespace OMX.Game
             var col = Palette.Of(c.Dna);
             Fx.I.Burst(c.Pos, Palette.Hdr(col, 2.5f), 14, 4 + c.Radius * 3, c.Radius * 0.6f, 0.7f);
             Fx.I.Burst(c.Pos, col, 8, 2 + c.Radius, c.Radius * 0.7f, 1.1f, true);
-            float total = Genome.ValueOf(c.Radius) * 0.85f;
+            float total = (c.Value > 0 ? c.Value : Genome.ValueOf(c.Radius)) * 0.85f;
             int n = Mathf.Clamp(Mathf.RoundToInt(c.Radius / Mathf.Max(0.1f, Player.Radius) * 3), 1, 7);
             if (c.Kind.Brain != Brain.Ally)
                 for (int i = 0; i < n; i++) SpawnMorsel(c.Pos + UnityEngine.Random.insideUnitSphere * c.Radius * 0.5f, total / n, c.Dna);
@@ -219,7 +252,7 @@ namespace OMX.Game
             foreach (var c in Live)
             {
                 if (!c.Alive || c.Digest >= 0) continue;
-                bool threat = (c.Hostile || c.Kind == Kinds.Gulper) && c.Radius >= Player.Radius * 0.85f;
+                bool threat = c.Kind.Military || ((c.Hostile || c.Kind == Kinds.Gulper) && c.Radius >= Player.Radius * 0.85f);
                 if (!threat) continue;
                 float d = (c.Pos - p).sqrMagnitude;
                 if (d < bd) { bd = d; best = c; }
@@ -266,9 +299,10 @@ namespace OMX.Game
                 var toP = pp - c.Pos; toP.y = 0;
                 float dist = toP.magnitude;
                 if (c.Kind.Brain != Brain.Ally && dist > despawn && !c.Kind.Rare) { Recycle(c); Live.RemoveAt(i); continue; }
-                if (c.Radius < pr * 0.14f && dist > ViewRadius * 1.1f && c.Kind.Brain != Brain.Morsel) { Recycle(c); Live.RemoveAt(i); continue; }
+                if (c.Kind.Size <= 0 && c.Radius < pr * 0.14f && dist > ViewRadius * 1.1f && c.Kind.Brain != Brain.Morsel) { Recycle(c); Live.RemoveAt(i); continue; }
 
-                Think(c, toP, dist, pr, dt);
+                if (c.Stun > 0) { c.Stun -= dt; c.Vel *= Mathf.Exp(-dt * 3); if (_rng.Chance(dt * 6)) Fx.I.Burst(c.Pos, Palette.Hdr(Palette.Of(Dna.Volt), 2f), 2, 2, c.Radius * 0.3f, 0.3f); }
+                else Think(c, toP, dist, pr, dt);
                 Move(c, dt);
                 Animate(c, dt);
                 if (c.Flash > 0) { c.Flash = Mathf.Max(0, c.Flash - dt * 6); SetFx(c, c.Flash, 0); }
@@ -350,6 +384,69 @@ namespace OMX.Game
                     }
                     break;
                 }
+                case Brain.Shooter:
+                {
+                    c.Cooldown -= dt;
+                    float range = 9 + pr * 2.5f;
+                    var side = Vector3.Cross(Vector3.up, away) * (c.Wander > 50 ? 1 : -1);
+                    if (canBeEaten && dist < 4 + pr * 2.2f) desired = (away + side * 0.4f).normalized * speed * 1.4f;
+                    else if (dist > range + 4) desired = -away * speed;
+                    else if (dist < range - 3) desired = (away + side * 0.6f).normalized * speed * 0.8f;
+                    else desired = side * speed * 0.5f;
+                    if (!Player.IsAlive || !Player.Controllable || dist > range + 14) { c.State = 0; break; }
+                    if (c.State == 0 && c.Cooldown <= 0) { c.State = 1; c.StateTimer = 0.45f; }
+                    if (c.State == 1)
+                    {
+                        c.Flash = Mathf.Max(c.Flash, 0.5f);
+                        c.StateTimer -= dt;
+                        if (c.StateTimer <= 0)
+                        {
+                            var dir = (Player.transform.position - c.Pos); dir.y = 0;
+                            dir = Quaternion.Euler(0, _rng.Range(-5f, 5f), 0) * dir.normalized;
+                            Projectiles.I.Bullet(c.Pos + dir * c.Radius, dir, 20, k.Damage);
+                            c.State = 0; c.Cooldown = _rng.Range(1.6f, 2.6f);
+                        }
+                    }
+                    break;
+                }
+                case Brain.Flyer:
+                {
+                    c.Cooldown -= dt;
+                    float orbit = 13 + pr * 2.5f;
+                    var tangent = Vector3.Cross(Vector3.up, away);
+                    desired = (tangent * 0.8f + away * Mathf.Clamp((orbit - dist) * 0.25f, -1, 1)).normalized * speed;
+                    if (!Player.IsAlive || !Player.Controllable) break;
+                    if (c.State == 0 && c.Cooldown <= 0 && dist < orbit + 10) { c.State = 1; c.StateTimer = 0.7f; }
+                    if (c.State == 1)
+                    {
+                        c.Flash = Mathf.Max(c.Flash, 0.3f + 0.3f * Mathf.Sin(c.T * 30));
+                        c.StateTimer -= dt;
+                        if (c.StateTimer <= 0)
+                        {
+                            Projectiles.I.Missile(c.Pos + Vector3.down * 0.6f, k.Damage);
+                            Projectiles.I.Missile(c.Pos + Vector3.down * 0.6f + tangent, k.Damage);
+                            c.State = 0; c.Cooldown = _rng.Range(4f, 5.5f);
+                        }
+                    }
+                    break;
+                }
+                case Brain.Artillery:
+                {
+                    c.Cooldown -= dt;
+                    float range = 20 + pr * 2;
+                    if (canBeEaten && dist < 6 + pr * 2) desired = away * speed;
+                    else if (dist > range) desired = -away * speed;
+                    else desired = Vector3.zero;
+                    if (!Player.IsAlive || !Player.Controllable || dist > range + 20) break;
+                    if (c.Cooldown <= 0)
+                    {
+                        var target = Player.transform.position + Player.Velocity * 1.0f;
+                        Projectiles.I.Strike(target, 1.5f, 2.6f + pr * 0.6f, k.Damage);
+                        Fx.I.Burst(c.Pos + Vector3.up * c.Radius * 0.5f - away * c.Radius * 1.4f, Palette.Hdr(Palette.Warning, 3f), 10, 6, c.Radius * 0.3f, 0.4f);
+                        c.Cooldown = _rng.Range(4.5f, 6f);
+                    }
+                    break;
+                }
                 case Brain.Ally:
                 {
                     Critter target = null; float bd = 18 * 18;
@@ -407,7 +504,7 @@ namespace OMX.Game
             if (c.Kind.Brain == Brain.Morsel) c.Vel *= Mathf.Exp(-dt * 2f);
             c.Pos += c.Vel * dt;
             c.Pos = Arena.Resolve(c.Pos, c.Radius);
-            float ground = Arena.HeightAt(c.Pos.x, c.Pos.z) + c.Radius * 0.9f;
+            float ground = Arena.HeightAt(c.Pos.x, c.Pos.z) + c.Radius * 0.9f + c.Kind.Altitude;
             float bob = Mathf.Sin(c.T * 2.1f + c.Wander) * c.Radius * 0.12f;
             c.Pos.y = Mathf.Lerp(c.Pos.y, ground + bob, 1 - Mathf.Exp(-dt * 6));
             var flat = new Vector3(c.Vel.x, 0, c.Vel.z);
@@ -450,6 +547,13 @@ namespace OMX.Game
                 if (c.State == 1) { c.Flash = Mathf.Max(c.Flash, 0.35f + 0.35f * Mathf.Sin(c.T * 30)); }
             }
             if (c.Kind == Kinds.Snapjaw && c.State == 1) c.Flash = Mathf.Max(c.Flash, 0.25f);
+            if (c.Kind == Kinds.Heli || c.Kind == Kinds.Drone) c.Tail.localRotation = Quaternion.Euler(0, c.T * 1400, 0);
+            if (c.Kind == Kinds.Police) { bool on = ((int)(c.T * 6)) % 2 == 0; c.JawL.localScale = on ? new Vector3(0.22f, 0.1f, 0.14f) : Vector3.zero; c.JawR.localScale = on ? Vector3.zero : new Vector3(0.22f, 0.1f, 0.14f); }
+            if (c.Kind == Kinds.Tank && Player != null)
+            {
+                var to = Player.transform.position - c.Pos; to.y = 0;
+                if (to.sqrMagnitude > 0.01f) c.JawL.rotation = Quaternion.RotateTowards(c.JawL.rotation, Quaternion.LookRotation(to), dt * 60);
+            }
         }
     }
 }

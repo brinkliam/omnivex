@@ -115,6 +115,91 @@ namespace OMX.Game
             return m;
         }
 
+        /// <summary>Unit box centred at the origin, flat-shaded, top/bottom tinted. Alpha = window glow (0 here).</summary>
+        public static Mesh Box(Color top, Color bottom)
+        {
+            var v = new List<Vector3>(); var c = new List<Color>(); var t = new List<int>(); var n = new List<Vector3>();
+            AddBox(v, c, t, n, Vector3.zero, Vector3.one, top, bottom);
+            var m = new Mesh(); m.SetVertices(v); m.SetNormals(n); m.SetColors(c); m.SetTriangles(t, 0); m.RecalculateBounds();
+            return m;
+        }
+
+        static readonly Vector3[] Faces = { Vector3.right, Vector3.left, Vector3.up, Vector3.down, Vector3.forward, Vector3.back };
+
+        public static void AddBox(List<Vector3> v, List<Color> c, List<int> t, List<Vector3> n, Vector3 center, Vector3 size, Color top, Color bottom, float glow = 0)
+        {
+            foreach (var f in Faces)
+            {
+                var u = Mathf.Abs(f.y) > 0.5f ? Vector3.right : Vector3.up;
+                var w = Vector3.Cross(f, u);
+                int b = v.Count;
+                for (int i = 0; i < 4; i++)
+                {
+                    float su = (i == 1 || i == 2) ? 0.5f : -0.5f, sw = i >= 2 ? 0.5f : -0.5f;
+                    var p = f * 0.5f + u * su + w * sw;
+                    v.Add(center + Vector3.Scale(p, size)); n.Add(f);
+                    var col = Color.Lerp(bottom, top, p.y + 0.5f); col.a = glow; c.Add(col);
+                }
+                t.Add(b); t.Add(b + 1); t.Add(b + 2); t.Add(b); t.Add(b + 2); t.Add(b + 3);
+            }
+        }
+
+        /// <summary>
+        /// A town building: walls, a roof (pitched for houses), and rows of windows whose vertex alpha drives the
+        /// shader's window glow. Footprint w x d, height h, base at y=0.
+        /// </summary>
+        public static Mesh Building(float w, float d, float h, Color wall, Color roof, bool pitched, int seed, float litChance)
+        {
+            var v = new List<Vector3>(); var c = new List<Color>(); var t = new List<int>(); var n = new List<Vector3>();
+            var rnd = new System.Random(seed);
+            AddBox(v, c, t, n, new Vector3(0, h / 2, 0), new Vector3(w, h, d), Color.Lerp(wall, Color.white, 0.08f), wall * 0.7f);
+            if (pitched)
+            {
+                // a gabled roof from two tilted slabs
+                float rh = Mathf.Min(w, d) * 0.45f;
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    int b = v.Count;
+                    var p0 = new Vector3(-w * 0.55f, h, s * d * 0.55f); var p1 = new Vector3(w * 0.55f, h, s * d * 0.55f);
+                    var p2 = new Vector3(w * 0.55f, h + rh, 0); var p3 = new Vector3(-w * 0.55f, h + rh, 0);
+                    v.Add(p0); v.Add(p1); v.Add(p2); v.Add(p3);
+                    var nn = Vector3.Cross(p1 - p0, p3 - p0).normalized * -s; if (nn.y < 0) nn = -nn;
+                    for (int i = 0; i < 4; i++) { n.Add(nn); c.Add(roof); }
+                    if (s > 0) { t.Add(b); t.Add(b + 1); t.Add(b + 2); t.Add(b); t.Add(b + 2); t.Add(b + 3); }
+                    else { t.Add(b); t.Add(b + 2); t.Add(b + 1); t.Add(b); t.Add(b + 3); t.Add(b + 2); }
+                }
+            }
+            else
+            {
+                AddBox(v, c, t, n, new Vector3(0, h + 0.25f, 0), new Vector3(w * 1.02f, 0.5f, d * 1.02f), roof, roof * 0.8f);
+                if (rnd.NextDouble() < 0.7) AddBox(v, c, t, n, new Vector3(w * 0.2f, h + 1.1f, -d * 0.15f), new Vector3(w * 0.22f, 1.4f, d * 0.22f), roof * 0.9f, roof * 0.7f);
+            }
+            // windows: a grid on all four facades
+            float floor = 3.2f;
+            int floors = Mathf.Max(1, Mathf.FloorToInt((h - 1f) / floor));
+            var lit = new Color(1f, 0.78f, 0.42f); var cool = new Color(0.45f, 0.95f, 1f); var dark = new Color(0.08f, 0.1f, 0.14f);
+            for (int side = 0; side < 4; side++)
+            {
+                var f = side == 0 ? Vector3.forward : side == 1 ? Vector3.back : side == 2 ? Vector3.right : Vector3.left;
+                float span = side < 2 ? w : d, depth = side < 2 ? d : w;
+                int cols = Mathf.Max(1, Mathf.FloorToInt(span / 2.6f));
+                for (int fl = 0; fl < floors; fl++)
+                    for (int col = 0; col < cols; col++)
+                    {
+                        bool on = rnd.NextDouble() < litChance;
+                        var wc = on ? (rnd.NextDouble() < 0.8 ? lit : cool) : dark;
+                        float x = (col + 0.5f) / cols * span - span / 2;
+                        float y = 1.4f + fl * floor + floor * 0.45f;
+                        if (y > h - 0.6f) continue;
+                        var center = f * (depth / 2 + 0.03f) + (side < 2 ? new Vector3(x, y, 0) : new Vector3(0, y, x));
+                        var size = side < 2 ? new Vector3(1.3f, 1.5f, 0.06f) : new Vector3(0.06f, 1.5f, 1.3f);
+                        AddBox(v, c, t, n, center, size, wc, wc, on ? 1f : 0f);
+                    }
+            }
+            var m = new Mesh(); m.SetVertices(v); m.SetNormals(n); m.SetColors(c); m.SetTriangles(t, 0); m.RecalculateBounds();
+            return m;
+        }
+
         /// <summary>Merge many (mesh, matrix) pairs into one mesh (static scenery batching).</summary>
         public static Mesh Combine(List<CombineInstance> parts)
         {

@@ -33,6 +33,7 @@ namespace OMX.Game
             _clips["slam"] = Synth.Boom();
             _clips["charge"] = Synth.Charge();
             _clips["vent"] = Synth.Hiss();
+            _clips["gun"] = Synth.Gun();
             _clips["click"] = Synth.Blip("click", 880, 0.08f, 0.35f);
             _clips["hover"] = Synth.Blip("hover", 1320, 0.05f, 0.15f);
             _clips["select"] = Synth.Arp("select", new[] { 659.25f, 830.61f, 987.77f }, 0.06f, 0.4f);

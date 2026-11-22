@@ -11,11 +11,13 @@ namespace OMX.Game
     /// brood summons. After every slam she's exhausted and her core opens - only then can you bite her.
     /// Phase two (below half health) adds a rotating spore spiral and quickens everything.
     /// </summary>
-    public sealed class Matriarch : MonoBehaviour
+    public sealed class Matriarch : MonoBehaviour, IBoss
     {
-        public PlayerCreature Player; public Ecosystem Eco; public CameraRig Rig; public AudioDirector Audio; public Arena Arena;
-        public float Hp, MaxHp = 1100;
-        public float Radius = 5f;
+        public PlayerCreature Player; public Ecosystem Eco; public CameraRig Rig; public AudioDirector Audio; public WorldBase Arena;
+        public float Hp { get; private set; }
+        public float MaxHp { get; private set; } = 1100;
+        public Vector3 Position => transform.position;
+        public float Radius { get; private set; } = 5f;
         public bool Active { get; private set; }
         public bool Exposed => _state == S.Exhausted;
         public int Phase => Hp < MaxHp * 0.5f ? 2 : 1;
