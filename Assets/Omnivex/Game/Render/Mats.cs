@@ -43,6 +43,7 @@ namespace OMX.Game
         {
             if (Cache.TryGetValue("seabed", out var m)) return m;
             m = new Material(Find(ref _seabed, "Omnivex/Seabed")) { name = "seabed" };
+            m.SetColor("_BaseColor", new Color(0.55f, 0.55f, 0.62f, 1));
             m.SetColor("_CausticColor", Palette.Hdr(Palette.Hex(0x7FFFF0), 0.55f));
             m.SetColor("_ZoneGlow", Palette.Hdr(Palette.Accent, 0.6f));
             Cache["seabed"] = m;

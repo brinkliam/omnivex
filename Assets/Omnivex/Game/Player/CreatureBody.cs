@@ -42,14 +42,15 @@ namespace OMX.Game
             _skinDef = skin;
             var body = Palette.Hex(skin.Body); var glow = Palette.Hex(skin.Glow); var acc = Palette.Hex(skin.Accent);
             _skin ??= Mats.BioUnique("player_skin", glow, 1f, glow, 0.6f, 0.05f);
-            _skin.SetColor("_BaseColor", body);
+            _skin.SetColor("_BaseColor", Color.Lerp(body, glow, 0.25f));
+            _skin.SetColor("_EmissionColor", Palette.Hdr(body, 0.35f));
             _skin.SetColor("_RimColor", Palette.Hdr(glow, 1.0f)); _skin.SetFloat("_Rim", 0.55f);
             _skin.SetColor("_GlowColor", Palette.Hdr(glow, 2.2f)); _skin.SetFloat("_VeinAmount", 0.5f); _skin.SetFloat("_VeinScale", 3.2f);
             _skin.SetFloat("_Gloss", 0.7f); _skin.SetFloat("_Pulse", 3f);
             _accent ??= Mats.BioUnique("player_accent", acc, 1f, acc, 0.5f, 0.02f);
             _accent.SetColor("_BaseColor", acc); _accent.SetColor("_RimColor", Palette.Hdr(acc, 1.2f)); _accent.SetColor("_GlowColor", Palette.Hdr(acc, 2.5f));
             _glowMat ??= Mats.BioUnique("player_glow", glow, 0.5f, glow, 0, 0.08f);
-            _glowMat.SetColor("_BaseColor", Color.black); _glowMat.SetColor("_EmissionColor", Palette.Hdr(glow, 4f));
+            _glowMat.SetColor("_BaseColor", Color.black); _glowMat.SetColor("_EmissionColor", Palette.Hdr(glow, 2.0f));
             _haloMat ??= Mats.Aura(Palette.Hdr(glow, 0.35f));
             _haloMat.SetColor("_Color", Palette.Hdr(glow, 0.35f));
 

@@ -103,11 +103,13 @@ namespace OMX.Game
                 v.Add(center - side); v.Add(center + side);
                 var col = Color.Lerp(baseCol, tipCol, u); c.Add(col); c.Add(col);
             }
+            int n = v.Count;
+            for (int i = 0; i < n; i++) { v.Add(v[i]); c.Add(c[i]); }   // the back face gets its own vertices
             for (int i = 0; i < segs; i++)
             {
-                int a = i * 2;
+                int a = i * 2, b = n + i * 2;
                 t.Add(a); t.Add(a + 2); t.Add(a + 1); t.Add(a + 1); t.Add(a + 2); t.Add(a + 3);
-                t.Add(a); t.Add(a + 1); t.Add(a + 2); t.Add(a + 1); t.Add(a + 3); t.Add(a + 2);
+                t.Add(b); t.Add(b + 1); t.Add(b + 2); t.Add(b + 1); t.Add(b + 3); t.Add(b + 2);
             }
             var m = new Mesh(); m.SetVertices(v); m.SetColors(c); m.SetTriangles(t, 0); m.RecalculateNormals(); m.RecalculateBounds();
             return m;
