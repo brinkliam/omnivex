@@ -33,7 +33,8 @@ namespace OMX.Game
         public PlayerCreature Player; public Ecosystem Eco; public CameraRig Rig; public AudioDirector Audio;
         public event Action<Building> OnDestroyed;
         public Vector3 BaseCenter { get; private set; }
-        public Vector3 PlayerStart => new Vector3(0, 0, -Bound + 14);
+        /// <summary>The storm drain you crawl out of: always on the far side of town from Fort Harrow.</summary>
+        public Vector3 PlayerStart => -BaseCenter.normalized * (Bound - 16);
 
         enum BlockType { Suburb, Midtown, Downtown, Plaza, Park, Industrial, Base }
         readonly Dictionary<(int, int), BlockType> _blocks = new Dictionary<(int, int), BlockType>();

@@ -29,7 +29,7 @@ The scene holds one object (`Bootstrap`), which builds everything from code and 
 - [x] Working save: versioned, checksummed, with a rolling backup and corruption recovery
 - Acceptance: a first-time player understands "eat small, flee big" within 30 s, gets an evolution within about 60 s, and reaches the boss in roughly 5 to 10 min (tested by simulation). The automated tests pass. The web build runs with zero console errors.
 
-### Phase 2: The Monster (human-scale town). Next
+### Phase 2: The Monster (town scale). Status: built 2026-11-22, verification in progress
 
 - The stage transition: the pool turns out to be a puddle in a town's gutter; the camera reveals the scale jump
 - Buildings with pre-fractured, multi-stage collapse (pooled chunks, dust, debris), and cars and street props

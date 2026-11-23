@@ -34,7 +34,10 @@ namespace OMX.Game
             _dist = DesiredDistance();
         }
 
-        float DesiredDistance() => 7.5f + SubjectRadius * 10.5f + SightBonus * 4f;
+        /// <summary>Stage zoom (the town is framed wider) times a portrait correction so tablets held upright see as much as wide screens.</summary>
+        public float ZoomScale = 1f;
+        float AspectFactor => Cam == null ? 1f : Mathf.Clamp(1.35f / Mathf.Max(0.3f, Cam.aspect), 1f, 1.8f);
+        float DesiredDistance() => (7.5f + SubjectRadius * 10.5f + SightBonus * 4f) * ZoomScale * AspectFactor;
 
         public void Shake(float amount) { if (ShakeEnabled) _trauma = Mathf.Min(1, _trauma + amount); }
         public void Punch(float amount) => _punch = Mathf.Clamp(_punch + amount, -0.4f, 0.4f);

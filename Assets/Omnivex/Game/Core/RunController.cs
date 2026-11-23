@@ -95,6 +95,7 @@ namespace OMX.Game
             WorldBase world = town ? (WorldBase)Town : Arena;
             Eco.Arena = world; Player.Arena = world; Proj.Arena = world;
             Eco.Stage = stage;
+            Rig.ZoomScale = town ? 1.45f : 1f;
             if (!town) Military.End();
             OnStageChanged?.Invoke(stage);
         }

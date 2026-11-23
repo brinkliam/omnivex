@@ -2,7 +2,9 @@
 
 *Start as nothing.*
 
-A mobile 3D evolution and devouring game built in Unity 6 (URP). You hatch as a speck in an alien tide pool and eat anything smaller than you. What you eat decides what you become. Five scale stages are planned, ending with you eating stars. This build covers Stage 1, **The Parasite**. Earlier design docs called the game "World Eater".
+A mobile and tablet 3D evolution and devouring game built in Unity 6 (URP). You hatch as a speck in an alien tide pool and eat anything smaller than you. What you eat decides what you become. Five scale stages are planned, ending with you eating stars. This build covers Stage 1, **The Parasite**, and Stage 2, **The Monster**.
+
+Play the web build at https://omnivex.vercel.app (add `?dev=1` for the test keys). Earlier design docs called the game "World Eater".
 
 ## Run it
 
@@ -14,12 +16,12 @@ A mobile 3D evolution and devouring game built in Unity 6 (URP). You hatch as a 
 
 | | Touch | Desktop |
 |---|---|---|
-| Swim | press anywhere and drag (floating stick) | WASD / arrows, or click-drag |
+| Swim | the thumbstick in the lower-left corner, or press anywhere and drag (floating stick) | WASD / arrows, or click-drag |
 | Dash | DASH button, or tap with a second finger | Space / Shift / right-click |
 | Pause | II button | Esc / P |
 | Photo mode | PHOTO button (hides the UI and saves a screenshot) | same |
 
-Dev keys work in the Editor, development builds, and the web build with `?dev=1`: **F9** +25 biomass, **F10** grow to boss size, **F8** full heal.
+Dev keys work in the Editor, development builds, and the web build with `?dev=1`: **F9** +25 biomass, **F10** grow to boss size, **F11** jump to Stage 2, **F8** full heal.
 
 ## What's in this build
 
@@ -62,6 +64,12 @@ Dev keys work in the Editor, development builds, and the web build with `?dev=1`
   - brood summons
 
   After each slam her core is exposed and only then can you bite her. Below half health she enrages and adds a rotating spore spiral. Her death plays in slow motion with dissolve and a biomass shower. Then she *infects* you, unlocking a legendary mutation, and the camera pulls up out of the consumed pool.
+- **Stage 2, Harrowgate (the town):** after the Matriarch, the camera pulls up out of the pool and you crawl out of a gutter into an alien town at dusk.
+  - **Districts:** suburbs, midtown, downtown towers, a plaza, parks you can hide in, an industrial quarter and the Fort Harrow military base. All are seeded.
+  - **Destruction:** every building chews apart in stages (crack, fail, collapse) with debris and dust, then bursts into biomass. Bigger buildings need a bigger creature.
+  - **Military alert, 1 to 5 stars:** loud play raises it and hiding cools it. It brings patrol cars, rifle squads, gunships with homing missiles, siege tanks with telegraphed artillery, and hunter drones. Dashing makes you briefly invulnerable.
+  - **Alloy DNA and 7 town mutations:** Plated Hull, Railspine, EMP Gland, Crusher Jaws, Seismic Tread, Chameleon Skin, and the boss's Reactor Heart.
+  - **Boss: the Bastion,** a four-legged siege fortress. It sweeps a laser through the town, calls artillery barrages that leave its reactor overheated and open to bites, and stomps out shockwave rings you dash through. Below half health it adds drones.
 - **Meta progression:** Essence from every run buys permanent upgrades in the **Genome Lab** (7 upgrades). You also get a daily gift with a streak, five cosmetic **Forms** (skins never carry stats), and a codex of discovered DNA and mutations.
 - **Monetization foundation:** test ads and a test store only, no real money. See [docs/MONETIZATION.md](docs/MONETIZATION.md).
 - **All original assets:** procedural meshes, custom URP shaders (living tissue with pulsing veins, a caustic seabed, glow telegraphs), and synthesised audio and adaptive music generated at startup.
