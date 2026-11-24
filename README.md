@@ -4,7 +4,7 @@
 
 A mobile and tablet 3D evolution and devouring game built in Unity 6 (URP). You hatch as a speck in an alien tide pool and eat anything smaller than you. What you eat decides what you become. Five scale stages are planned, ending with you eating stars. This build covers Stage 1, **The Parasite**, and Stage 2, **The Monster**.
 
-Play the web build at https://omnivex.vercel.app (add `?dev=1` for the test keys). Earlier design docs called the game "World Eater".
+Play the web build at https://omnivex-one.vercel.app (add `?dev=1` for the test keys). Earlier design docs called the game "World Eater".
 
 ## Run it
 

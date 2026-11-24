@@ -110,3 +110,21 @@ The scene holds one object (`Bootstrap`), which builds everything from code and 
 - A real LevelPlay/IAP provider, which needs account keys.
 - Stage 2+.
 - Cloud save: the Unity Cloud link failed because no default org is set.
+
+### 2026-11-22: Stage 2 pass
+
+- **Tests:** 39/39 EditMode tests pass. New tests: town mutations stay locked until Stage 2, an Alloy diet surfaces Alloy cards, and evolutions after the 12th space out.
+- **Web build, played in the browser pane:**
+  - The fixed lower-left thumbstick drives the creature (tested with real pointer events), and the floating stick still works.
+  - F11 jumps to Harrowgate. The town renders at dusk with lit windows, cars, townsfolk, district names and the alert meter.
+  - Stage 2 mutation cards are offered there (Crusher Jaws, Seismic Tread, Chameleon Skin).
+- **Fixed:**
+  - the camera was too close in portrait and in the town (now aspect- and stage-aware)
+  - the creature could emerge inside Fort Harrow (it now starts opposite the base)
+  - a build hung overnight when the PC slept
+- **Not yet verified by hand:**
+  - chewing a building down to collapse
+  - each alert star's units in combat
+  - the Bastion's patterns and death
+  - the stage clear
+- **Deployed:** https://omnivex-one.vercel.app (Vercel project "omnivex", PaintFlow team, serving `web/` from main). Repo: https://github.com/brinkliam/omnivex
