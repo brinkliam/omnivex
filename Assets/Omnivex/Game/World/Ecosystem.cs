@@ -81,6 +81,13 @@ namespace OMX.Game
             _pool[c.Kind.Id].Push(c);
         }
 
+        /// <summary>Removes everything that can attack (used when a run ends mid-fight).</summary>
+        public void RemoveHostiles()
+        {
+            for (int i = Live.Count - 1; i >= 0; i--)
+                if (Live[i].Hostile) { Recycle(Live[i]); Live.RemoveAt(i); }
+        }
+
         public void Clear()
         {
             for (int i = Live.Count - 1; i >= 0; i--) Recycle(Live[i]);

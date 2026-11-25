@@ -29,6 +29,15 @@ namespace OMX.Game
         float _hintSeen;
         public void ResetStickHint() => _hintSeen = 0;
 
+        /// <summary>A small always-on line listing the dev keys (only shown with ?dev=1).</summary>
+        public void SetDevHint(string text)
+        {
+            var l = Text(text, 12, Palette.Warning, true, TextAnchor.MiddleCenter);
+            l.style.position = Position.Absolute; l.style.left = 0; l.style.right = 0; l.style.bottom = 4;
+            l.style.backgroundColor = new Color(0, 0, 0, 0.45f);
+            _safe.Add(l);
+        }
+
         public void Init()
         {
             _doc = gameObject.AddComponent<UIDocument>();
@@ -61,6 +70,7 @@ namespace OMX.Game
             InputRouter.I.OnPause += () => { if (Run.State == RunState.Playing) Run.Pause(); else if (Run.State == RunState.Paused) Run.Resume(); };
             InputRouter.I.OnDash += () => Player.Dash();
             Services.MockAds.Presenter = ShowTestAd;
+            Services.Ads.OnTimedOut += _ => { _abortTestAd?.Invoke(); Toast("AD UNAVAILABLE", "No reward this time", Palette.UiDim); };
         }
 
         /// <summary>True if a screen position lands on an interactive UI element (so it shouldn't steer the creature).</summary>
@@ -241,14 +251,17 @@ namespace OMX.Game
                 float pk = _root.layout.height > 0 ? _root.layout.height / Screen.height : 1;
                 float rad = ir.StickRadius * pk, knob = rad * 0.42f;
                 var o = ToPanel(active ? ir.StickOrigin : ir.FixedCenter);
-                var kp = active ? ToPanel(ir.StickOrigin + Vector2.ClampMagnitude(ir.StickPos - ir.StickOrigin, ir.StickRadius)) : o;
+                // the knob follows the finger, travelling up to three quarters of the ring so it always stays visible inside it
+                var kp = active ? ToPanel(ir.StickOrigin + Vector2.ClampMagnitude(ir.StickPos - ir.StickOrigin, ir.StickRadius * 0.75f)) : o;
                 _stick.style.width = rad * 2; _stick.style.height = rad * 2; Radius(_stick, rad);
                 _knob.style.width = knob * 2; _knob.style.height = knob * 2; Radius(_knob, knob);
                 _stick.style.left = o.x - rad; _stick.style.top = o.y - rad;
                 _knob.style.left = kp.x - knob; _knob.style.top = kp.y - knob;
                 _stick.style.opacity = active ? 1f : 0.55f;
                 _knob.style.opacity = active ? 1f : 0.6f;
-                _stickHint.style.left = o.x - 90; _stickHint.style.top = o.y - rad - 30;
+                // keep the hint fully inside the safe area (it was clipped at the left edge on narrow screens)
+                float maxLeft = Mathf.Max(8, _safe.layout.width - 188);
+                _stickHint.style.left = Mathf.Clamp(o.x - 90, 8, maxLeft); _stickHint.style.top = Mathf.Max(8, o.y - rad - 30);
                 if (active || Player.Velocity.sqrMagnitude > 1f) _hintSeen += Time.unscaledDeltaTime;
                 _stickHint.style.display = _hintSeen < 1.5f ? DisplayStyle.Flex : DisplayStyle.None;
             }

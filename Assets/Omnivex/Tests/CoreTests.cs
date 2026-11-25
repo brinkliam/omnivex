@@ -79,6 +79,16 @@ namespace OMX.Tests
             Assert.IsTrue(g.Apply("crown"));
         }
 
+        [Test] public void GrowSilentlyLeavesNothingPending()
+        {
+            var g = new Genome();
+            g.GrowSilently(Genome.TierThreshold(5), new Rng(3));
+            Assert.AreEqual(5, g.Tier);
+            Assert.AreEqual(0, g.PendingEvolutions);
+            Assert.Greater(g.Evolutions, 5);
+            Assert.Less(g.BiomassTotal, Genome.TierThreshold(5) + 25, "lands at the stage-2 starting size, not far past it");
+        }
+
         [Test] public void TownMutationsUnlockOnlyInStage2()
         {
             var g = new Genome();
@@ -350,6 +360,102 @@ namespace OMX.Tests
             int granted = 0;
             for (int i = 0; i < cap + 3; i++) { ads.ShowRewarded(Placements.FeedingFrenzy, _ => granted++); clock.Now += 1000; }
             Assert.AreEqual(cap, granted);
+        }
+    }
+
+    public class AdTimeoutTests
+    {
+        sealed class Gate : IGameplayGate { public bool IsCriticalMoment => false; public bool IsOnline => true; }
+
+        (AdManager ads, MockAdProvider mock, ManualClock clock) Make()
+        {
+            var clock = new ManualClock { Now = 1000 };
+            var an = new AnalyticsService(clock, true, "t");
+            var mock = new MockAdProvider { NeverCallBack = true };
+            var ads = new AdManager(AdConfig.Default(), mock, clock, new EntitlementStore(true, an), an, new Gate());
+            ads.Initialize();
+            return (ads, mock, clock);
+        }
+
+        [Test] public void HungAdResolvesAsFailedAfterTimeoutAndUnblocks()
+        {
+            var (ads, mock, clock) = Make();
+            int rewards = 0; AdResult? finished = null; string timedOut = null;
+            ads.OnTimedOut += p => timedOut = p;
+            ads.ShowRewarded(Placements.SecondChance, _ => rewards++, (r, _) => finished = r);
+            Assert.IsTrue(ads.Busy);
+            clock.Now += 29; ads.Tick();
+            Assert.IsNull(finished, "not yet");
+            clock.Now += 2; ads.Tick();
+            Assert.AreEqual(AdResult.Failed, finished);
+            Assert.AreEqual(Placements.SecondChance, timedOut);
+            Assert.AreEqual(0, rewards);
+            Assert.IsFalse(ads.Busy);
+            mock.NeverCallBack = false;
+            Assert.IsTrue(ads.CanShow(Placements.MutationReroll, out var why), why);
+        }
+
+        [Test] public void PausedTimeDoesNotCountAndResumeGetsGrace()
+        {
+            var (ads, _, clock) = Make();
+            AdResult? finished = null;
+            ads.ShowRewarded(Placements.DoubleEssence, _ => { }, (r, _) => finished = r);
+            clock.Now += 25;
+            ads.AppPaused(true);
+            clock.Now += 600; ads.Tick();
+            Assert.IsNull(finished, "a backgrounded app never times out while paused");
+            ads.AppPaused(false);
+            clock.Now += 4; ads.Tick();
+            Assert.IsNull(finished, "remaining time and grace still running");
+            clock.Now += 6; ads.Tick();
+            Assert.AreEqual(AdResult.Failed, finished);
+        }
+
+        [Test] public void LateCallbackAfterTimeoutGrantsNothing()
+        {
+            var clock = new ManualClock { Now = 1000 };
+            var an = new AnalyticsService(clock, true, "t");
+            System.Action<AdResult, bool> late = null;
+            var mock = new MockAdProvider { Presenter = (id, f, done) => late = done };
+            var ads = new AdManager(AdConfig.Default(), mock, clock, new EntitlementStore(true, an), an, new Gate());
+            ads.Initialize();
+            int rewards = 0;
+            ads.ShowRewarded(Placements.DoubleEssence, _ => rewards++);
+            clock.Now += 31; ads.Tick();
+            late(AdResult.Completed, true);
+            Assert.AreEqual(0, rewards);
+        }
+    }
+
+    public class ConsentTests
+    {
+        [Test] public void AdsStayUninitialisedUntilConsentResolves()
+        {
+            var clock = new ManualClock { Now = 1000 };
+            var an = new AnalyticsService(clock, false, "t");
+            var mock = new MockAdProvider();
+            var ads = new AdManager(AdConfig.Default(), mock, clock, new EntitlementStore(true, an), an, null);
+            var gate = new ConsentGate(new StubConsentPlatform());
+            gate.OnResolved += d => { an.SetConsent(d.Analytics); ads.Initialize(d); };
+            Assert.IsFalse(ads.CanShow(Placements.DoubleEssence, out var why));
+            Assert.AreEqual("ads not initialised", why);
+            gate.Resolve(true, false);
+            Assert.IsTrue(ads.CanShow(Placements.DoubleEssence, out _));
+            Assert.IsFalse(mock.Personalized, "non-personalized when the player declined");
+            Assert.IsTrue(an.Consent);
+        }
+
+        [Test] public void ChildDirectedAndUmpForceThePrivateOption()
+        {
+            var child = new ConsentGate(new StubConsentPlatform { ChildDirected = true });
+            child.Resolve(true, true);
+            Assert.IsFalse(child.Decision.PersonalizedAds);
+            Assert.IsFalse(child.Decision.Analytics);
+            Assert.IsTrue(child.Decision.ChildDirected);
+            var ump = new ConsentGate(new StubConsentPlatform { UmpAnswer = false });
+            ump.Resolve(true, true);
+            Assert.IsFalse(ump.Decision.PersonalizedAds, "UMP refusal wins over the in-game choice");
+            Assert.IsTrue(ump.Decision.Analytics);
         }
     }
 

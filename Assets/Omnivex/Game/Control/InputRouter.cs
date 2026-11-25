@@ -21,6 +21,7 @@ namespace OMX.Game
         public event Action OnPause;
 
         int _touchId = -1;
+        readonly System.Collections.Generic.HashSet<int> _knownTouches = new System.Collections.Generic.HashSet<int>();
         bool _mouseDown;
         public float StickRadius => Mathf.Clamp(Screen.dpi > 0 ? Screen.dpi * 0.5f : Mathf.Min(Screen.width, Screen.height) * 0.11f, 56f, 220f);
 
@@ -32,7 +33,8 @@ namespace OMX.Game
             {
                 var sa = Screen.safeArea;
                 float r = StickRadius;
-                return new Vector2(sa.xMin + r * 1.55f, sa.yMin + r * 1.55f);
+                float pad = Mathf.Max(16f, Mathf.Min(Screen.width, Screen.height) * 0.03f);
+                return new Vector2(sa.xMin + r * 1.55f + pad, sa.yMin + r * 1.55f + pad);
             }
         }
         public bool UsingFixed { get; private set; }
@@ -71,29 +73,36 @@ namespace OMX.Game
             }
 
             var ts = Touchscreen.current;
-            if (ts != null && (_touchId >= 0 || ts.primaryTouch.press.isPressed))
+            bool anyTouch = false;
+            if (ts != null)
             {
-                bool found = false;
                 foreach (var t in ts.touches)
                 {
                     var phase = t.phase.ReadValue();
                     int id = t.touchId.ReadValue();
-                    var pos = t.position.ReadValue();
-                    if (phase == UnityEngine.InputSystem.TouchPhase.Began)
+                    bool down = phase == UnityEngine.InputSystem.TouchPhase.Began || phase == UnityEngine.InputSystem.TouchPhase.Moved || phase == UnityEngine.InputSystem.TouchPhase.Stationary;
+                    if (!down)
                     {
-                        if (BlockedByUi != null && BlockedByUi(pos)) continue;
-                        if (_touchId < 0) { _touchId = id; StickOrigin = BeginStick(pos); }
-                        else if (id != _touchId && Enabled) OnDash?.Invoke();   // a second finger tap dashes
+                        if (id != 0) _knownTouches.Remove(id);
+                        if (id == _touchId) _touchId = -1;
+                        continue;
                     }
-                    if (id == _touchId)
+                    anyTouch = true;
+                    // A finger we haven't seen yet is a new touch, even if its first sampled phase is already Moved
+                    // (a fast touch-and-drag can begin and move inside one frame). Decide its role from where it started.
+                    if (_knownTouches.Add(id))
                     {
-                        if (phase == UnityEngine.InputSystem.TouchPhase.Ended || phase == UnityEngine.InputSystem.TouchPhase.Canceled) { _touchId = -1; continue; }
-                        found = true; StickPos = pos; stick = true;
+                        var start = t.startPosition.ReadValue();
+                        if (BlockedByUi != null && BlockedByUi(start)) continue;   // buttons handle their own touches
+                        if (IsEdge(start)) continue;                                // palm or grip on the bezel: ignore it
+                        if (_touchId < 0 && InStickZone(start)) { _touchId = id; StickOrigin = BeginStick(start); }
+                        else if (Enabled) OnDash?.Invoke();                         // another finger (e.g. the right thumb) dashes
                     }
+                    if (id == _touchId) { StickPos = t.position.ReadValue(); stick = true; }
                 }
-                if (!found && _touchId >= 0 && !AnyTouchWithId(ts, _touchId)) _touchId = -1;
+                if (!anyTouch) { _touchId = -1; _knownTouches.Clear(); }
             }
-            else
+            if (!anyTouch)
             {
                 var m = Mouse.current;
                 if (m != null)
@@ -118,14 +127,14 @@ namespace OMX.Game
             Move = Enabled ? Vector2.ClampMagnitude(move, 1f) : Vector2.zero;
         }
 
-        static bool AnyTouchWithId(Touchscreen ts, int id)
+        /// <summary>Touches starting this close to the screen border are treated as a resting palm and ignored.</summary>
+        static bool IsEdge(Vector2 p)
         {
-            foreach (var t in ts.touches)
-            {
-                var ph = t.phase.ReadValue();
-                if (t.touchId.ReadValue() == id && ph != UnityEngine.InputSystem.TouchPhase.None && ph != UnityEngine.InputSystem.TouchPhase.Ended && ph != UnityEngine.InputSystem.TouchPhase.Canceled) return true;
-            }
-            return false;
+            float m = Mathf.Max(12f, Mathf.Min(Screen.width, Screen.height) * 0.035f);
+            return p.x < m || p.y < m || p.x > Screen.width - m || p.y > Screen.height - m;
         }
+
+        /// <summary>The fixed stick, or anywhere in the left 60% of the screen (where a floating stick may start).</summary>
+        bool InStickZone(Vector2 p) => (p - FixedCenter).magnitude < StickRadius * 1.6f || p.x < Screen.width * 0.6f;
     }
 }

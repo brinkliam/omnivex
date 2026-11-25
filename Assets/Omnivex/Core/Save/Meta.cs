@@ -12,6 +12,7 @@ namespace OMX.Core
         public int quality = -1;          // -1 = auto
         public bool haptics = true, shake = true, reducedFlashing;
         public bool consentAsked, analyticsConsent;
+        public bool personalizedAds;     // only meaningful once consentAsked is true
     }
 
     /// <summary>Everything that persists between runs. Versioned; see SaveStore for migration and recovery.</summary>

@@ -158,7 +158,7 @@ namespace OMX.Game
                         if (p.kind == Kind.Missile) { Audio?.Play("slam", 0.5f, 1.4f); Rig?.Shake(0.15f); }
                         Kill(p);
                     }
-                    else if (p.kind != Kind.Spore && Arena.HitStructure(p.pos, p.r, p.kind == Kind.Missile ? p.dmg * 2 : 0)) Kill(p);
+                    else if (p.kind != Kind.Spore && Arena.HitStructure(p.pos, p.r, p.kind == Kind.Missile ? p.dmg * 2 : 0, Instigator.Enemy)) Kill(p);
                 }
                 else
                 {
@@ -170,7 +170,7 @@ namespace OMX.Game
                         if (dd.magnitude < c.Radius + p.r) { hit = true; Eco.Damage(c, p.dmg); }
                     });
                     if (!hit && HitBoss != null) hit = HitBoss(p.pos, p.r, p.dmg);
-                    if (!hit) hit = Arena.HitStructure(p.pos, p.r, p.kind == Kind.Bolt ? p.dmg * 1.5f : p.dmg * 0.5f);
+                    if (!hit) hit = Arena.HitStructure(p.pos, p.r, p.kind == Kind.Bolt ? p.dmg * 1.5f : p.dmg * 0.5f, Instigator.Player);
                     if (hit)
                     {
                         var col = p.kind == Kind.Bolt ? Palette.Of(Dna.Alloy) : Palette.Of(Dna.Toxin);
@@ -196,7 +196,7 @@ namespace OMX.Game
                 Audio?.At("slam", s.pos, 0.8f);
                 if (Player != null && (Player.transform.position - s.pos).magnitude < s.radius + Player.Radius * 0.5f) { Player.TakeDamage(s.dmg, s.pos); Rig?.Shake(0.35f); }
                 Eco.ForEachNear(s.pos, s.radius + 1, (c, d) => { if (c.Kind.Brain != Brain.Morsel && !c.Kind.Military) Eco.Damage(c, 60, false); });
-                Arena.DamageStructures(s.pos, s.radius, s.dmg * 3);
+                Arena.DamageStructures(s.pos, s.radius, s.dmg * 3, Instigator.Enemy);
             }
         }
     }

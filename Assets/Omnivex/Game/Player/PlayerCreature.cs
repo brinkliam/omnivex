@@ -18,6 +18,8 @@ namespace OMX.Game
         public float MaxHealth => Genome.Current.MaxHealth;
         public bool IsAlive => Health > 0;
         public bool Controllable = true;
+        /// <summary>Set once the run is over (results showing): nothing can hurt or kill the creature any more.</summary>
+        public bool RunEnded;
         public bool Hidden { get; private set; }
         public float FrenzyTime;        // rewarded-ad boost: +50% biomass
         public Vector3 Velocity { get; private set; }
@@ -46,6 +48,7 @@ namespace OMX.Game
 
         public void BeginRun(Genome g)
         {
+            RunEnded = false;
             Genome = g;
             Body.Clear();
             Body.Sync(g, false);
@@ -171,7 +174,7 @@ namespace OMX.Game
                         Eco.Damage(c, 18 * s.Volt * (0.6f + Radius * 0.5f));
                     });
                     BossHook?.Invoke(p, range, 18 * s.Volt * (0.6f + Radius * 0.5f));
-                    Arena.DamageStructures(p, range, 12 * s.Volt * Radius);
+                    Arena.DamageStructures(p, range, 12 * s.Volt * Radius, Instigator.Player);
                     Fx.I.Ring(p, Palette.Hdr(Palette.Of(Dna.Volt), 2.5f), Radius, range, 0.35f, 0.08f);
                     Audio?.Play("zap", 0.6f, 1f + UnityEngine.Random.Range(-0.1f, 0.1f));
                 }
@@ -325,7 +328,7 @@ namespace OMX.Game
             Fx.I.Burst(transform.position, new Color(0.5f, 0.48f, 0.5f, 1), 14, 6, Radius * 0.4f, 1f, true);
             Rig.Shake(0.3f); Rig.Punch(-0.05f);
             Audio?.Play("slam", 0.7f, 1.3f);
-            Arena.DamageStructures(transform.position, range, 60 * s.Quake * Radius);
+            Arena.DamageStructures(transform.position, range, 60 * s.Quake * Radius, Instigator.Player);
             Eco.ForEachNear(transform.position, range, (c, d) => { if (c.Hostile || c.Kind == Kinds.Car) { c.Stun = 1.2f; Eco.Damage(c, 25 * s.Quake); } });
             BossHook?.Invoke(transform.position, range, 40 * s.Quake);
         }
@@ -361,7 +364,7 @@ namespace OMX.Game
 
         public void TakeDamage(float amount, Vector3 from, bool ignoreInvuln = false)
         {
-            if (!IsAlive || (_invuln > 0 && !ignoreInvuln)) return;
+            if (RunEnded || !IsAlive || (_invuln > 0 && !ignoreInvuln)) return;
             if (_dashT > 0 && !ignoreInvuln) { Fx.I.Burst(transform.position, Palette.Hdr(Palette.Accent, 2f), 4, 3, Radius * 0.2f, 0.3f); return; }   // dashing slips through
             float dmg = amount * (1 - Genome.Current.Armor);
             Health -= dmg;

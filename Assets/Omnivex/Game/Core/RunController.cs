@@ -14,6 +14,7 @@ namespace OMX.Game
         public string Build;
         public List<string> Mutations = new List<string>();
         public bool Doubled;
+        public bool Abandoned;   // the player chose END RUN
         public int Seed;
     }
 
@@ -32,6 +33,7 @@ namespace OMX.Game
         public int Stage { get; private set; } = 1;
         public IBoss ActiveBoss => Stage == 2 ? (IBoss)Bastion : Boss;
         int _buildingsDestroyed;
+        bool _runEnded;   // set once by FinishRun: payout, results and world shutdown happen exactly once
         public RunState State { get; private set; } = RunState.Lair;
         public float RunTime { get; private set; }
         public int RerollsLeft { get; private set; }
@@ -64,6 +66,7 @@ namespace OMX.Game
             Proj.HitBoss = (p, r, dmg) => ActiveBoss.HitTest(p, r, dmg);
             Town.OnDestroyed += b =>
             {
+                if (!b.KilledByPlayer || _runEnded) return;   // gunships, artillery and the Bastion wreck the town too; that isn't the player's noise
                 Military.OnBuilding(b);
                 if (b.Tree) return;
                 _buildingsDestroyed++;
@@ -125,16 +128,50 @@ namespace OMX.Game
             Services.Analytics.Track("stage_start", ("stage", "2"), ("t", RunTime.ToString("0")), ("biomass", Player.Genome.BiomassTotal.ToString("0")));
         }
 
-        /// <summary>Dev: skip straight to the town with a grown creature (F11 with ?dev=1).</summary>
+        // ------------------------------------------------------------------ dev shortcuts (?dev=1 only, wired in Bootstrap)
+
+        readonly Rng _devRng = new Rng(5);
+
+        void DevSettle()
+        {
+            Player.Mutated();
+            Player.Heal(1f);
+            _lastTier = Player.Genome.Tier;
+            _evoDelay = -1;
+        }
+
+        /// <summary>F9: straight to Harrowgate at the normal Stage 2 starting size (end of the pool), no Evolve screens.</summary>
         public void DevJumpToStage2()
         {
-            if (State != RunState.Playing || Stage != 1) return;
-            var rng = new Rng(5);
-            while (Player.Genome.Tier < 5) Player.Genome.Feed(20, (Dna)rng.Range(0, 5));
-            while (Player.Genome.PendingEvolutions > 0) { var o = Evolution.Offer(Player.Genome, rng); if (o.Count == 0) Player.Genome.SkipEvolution(); else Player.Genome.Apply(o[0].Id); }
-            Player.Mutated();
-            _lastTier = Player.Genome.Tier;
+            if (Stage != 1 || (State != RunState.Playing && State != RunState.BossIntro)) return;
+            Boss.Despawn();
+            Player.Genome.GrowSilently(Genome.TierThreshold(5), _devRng);
+            DevSettle();
             EnterStage2();
+            UI.Toast("DEV: STAGE 2", $"Biomass {Player.Genome.BiomassTotal:0}, {Genome.TierNames[Player.Genome.Tier]}", Palette.Warning);
+        }
+
+        /// <summary>F8: start the Bastion fight now at the normal boss-fight size, without queuing evolutions.</summary>
+        public void DevBastion()
+        {
+            if (State != RunState.Playing) return;
+            if (Stage == 1) DevJumpToStage2();
+            if (Stage != 2 || Bastion.Active) return;
+            Player.Genome.GrowSilently(Genome.TierThreshold(8), _devRng);
+            DevSettle();
+            _bossCountdown = -1;
+            SpawnBoss();
+        }
+
+        /// <summary>F10: grow one size tier right now (visibly), auto-picking the evolutions on the way.</summary>
+        public void DevGrowTier()
+        {
+            if (State != RunState.Playing) return;
+            var g = Player.Genome;
+            float target = g.Tier + 1 < Genome.TierNames.Length ? Genome.TierThreshold(g.Tier + 1) : g.BiomassTotal * 1.35f;
+            g.GrowSilently(target, _devRng);
+            Player.Mutated();
+            UI.Toast("DEV: GROW", $"Biomass {g.BiomassTotal:0}, radius {g.Radius:0.0}", Palette.Warning);
         }
 
         // ------------------------------------------------------------------ flow
@@ -173,6 +210,7 @@ namespace OMX.Game
             Eco.SpawningEnabled = true; Eco.PreyTarget = 58; Eco.PredatorScale = 1;
             Eco.Populate(34);
             RerollsLeft = Lab.FreeRerolls(save);
+            _runEnded = false;
             RevivedThisRun = false; _bossSpawned = false; _bossDone = false; _lastTier = 0; RunTime = 0;
             _evoDelay = g.PendingEvolutions > 0 ? 1.2f : -1; _bossCountdown = -1;
             Player.Controllable = true;
@@ -196,6 +234,7 @@ namespace OMX.Game
 
         void Update()
         {
+            Services.Ads.Tick();   // real-time ad timeout, runs even while the game is paused
             float dt = Time.deltaTime;
             if (State == RunState.Playing || State == RunState.BossIntro)
             {
@@ -296,7 +335,13 @@ namespace OMX.Game
                 {
                     if (_offer.Count >= 3) _offer[0] = MutationCatalog.Get(gift.Item2); else _offer.Insert(0, MutationCatalog.Get(gift.Item2));
                 }
-            if (_offer.Count == 0) { Player.Genome.SkipEvolution(); return; }
+            if (_offer.Count == 0)
+            {
+                // every mutation is maxed: spend all pending evolutions silently and carry on (never strand the stage clear)
+                while (Player.Genome.PendingEvolutions > 0) Player.Genome.SkipEvolution();
+                if (_bossDone && State == RunState.Playing) BeginStageClear();
+                return;
+            }
             State = RunState.Evolving;
             Time.timeScale = 0;
             Player.Controllable = false;
@@ -356,7 +401,7 @@ namespace OMX.Game
             _bossSpawned = true;
             if (Stage == 2)
             {
-                Bastion.Summon(Player.Radius);
+                Bastion.Summon(Mathf.Max(Player.Radius, Player.Genome.Radius));
                 State = RunState.BossIntro;
                 Player.Controllable = false;
                 UI.BossIntro(Bastion.Title, "Dash through the beam and the shockwave. Bite the reactor when it overheats.");
@@ -418,6 +463,7 @@ namespace OMX.Game
 
         void OnDied()
         {
+            if (_runEnded || State == RunState.Results) return;   // never offer a revive once results are up
             State = RunState.Dying;
             _dyingT = 0;
             Player.Controllable = false;
@@ -428,8 +474,10 @@ namespace OMX.Game
 
         public void AcceptRevive()
         {
+            if (_runEnded) return;
             Services.Ads.ShowRewarded(Placements.SecondChance, grant =>
             {
+                if (_runEnded) return;
                 RevivedThisRun = true;
                 Time.timeScale = 1;
                 State = RunState.Playing;
@@ -446,8 +494,16 @@ namespace OMX.Game
 
         public void DeclineRevive() => FinishRun(false);
 
-        void FinishRun(bool cleared)
+        void FinishRun(bool cleared, bool abandoned = false)
         {
+            if (_runEnded) return;
+            _runEnded = true;
+            // shut the fight down first: no boss, no shells in the air, no military, and the creature can't be hurt
+            Player.RunEnded = true;
+            Boss.Despawn(); Bastion.Despawn();
+            Proj.ClearAll();
+            Military.End();
+            Eco.RemoveHostiles();
             Time.timeScale = 1;
             Rig.Cinematic(Player.transform.position, 20, 0);
             var g = Player.Genome;
@@ -456,7 +512,7 @@ namespace OMX.Game
             var r = new RunResult
             {
                 Cleared = cleared, BossKilled = _bossDone, Biomass = g.BiomassTotal, Seconds = RunTime, Kills = Player.Kills,
-                Evolutions = g.Evolutions, Essence = essence, Tier = g.Tier, Build = g.BuildTitle, Seed = Seed, Stage = Stage, Buildings = _buildingsDestroyed,
+                Evolutions = g.Evolutions, Essence = essence, Tier = g.Tier, Build = g.BuildTitle, Seed = Seed, Stage = Stage, Buildings = _buildingsDestroyed, Abandoned = abandoned,
             };
             foreach (var kv in g.Levels) r.Mutations.Add(MutationCatalog.Get(kv.Key).Name + (kv.Value > 1 ? " " + Roman(kv.Value) : ""));
             LastResult = r;
@@ -516,7 +572,7 @@ namespace OMX.Game
         public void Abandon()
         {
             Time.timeScale = 1;
-            FinishRun(false);
+            FinishRun(false, abandoned: true);
         }
 
         public void ActivateFrenzy()
@@ -528,8 +584,11 @@ namespace OMX.Game
             });
         }
 
+        void OnApplicationFocus(bool focused) => Services?.Ads.AppPaused(!focused);
+
         void OnApplicationPause(bool paused)
         {
+            Services?.Ads.AppPaused(paused);
             if (!paused) return;
             Services?.Persist();
             Services?.Analytics.Flush();

@@ -94,13 +94,19 @@ namespace OMX.Game
             _armor.SetFloat("_Dissolve", 0); _core.SetFloat("_Dissolve", 0);
             gameObject.SetActive(true);
             Active = true;
-            Go(S.Intro); _cycle = 0;
+            Go(S.Intro); _cycle = 0; _phase2Pending = false;
             Audio?.Play("roar", 1f, 0.5f);
         }
 
         public void Despawn() { Active = false; _beam.enabled = false; gameObject.SetActive(false); }
 
-        void Go(S s) { _state = s; _stateT = 0; }
+        void Go(S s)
+        {
+            _state = s; _stateT = 0;
+            if (s != S.LaserTele && s != S.Laser) _beam.enabled = false;   // a beam never outlives its attack
+        }
+
+        bool _phase2Pending;   // phase 2 began while the reactor was open: summon the drones once the window closes
 
         void Update()
         {
@@ -153,7 +159,7 @@ namespace OMX.Game
                     float along = Vector3.Dot(rel, dir);
                     if (along > 0 && (rel - dir * along).magnitude < 1.2f + Player.Radius * 0.6f) Player.TakeDamage(14, origin + dir * along);
                     if ((int)(_stateT * 10) != (int)((_stateT - dt) * 10))
-                        for (int i = 1; i < 6; i++) Town.DamageStructures(new Vector3(origin.x, 0, origin.z) + dir * i * 8, 2.5f, 120);
+                        for (int i = 1; i < 6; i++) Town.DamageStructures(new Vector3(origin.x, 0, origin.z) + dir * i * 8, 2.5f, 120, Instigator.Enemy);
                     if (_stateT % 0.1f < dt) Fx.I.Burst(origin + dir * Mathf.Min(60, along > 0 ? along : 30), Palette.Hdr(Palette.Warning, 3f), 3, 4, 0.6f, 0.3f);
                     Rig.Shake(dt * 0.3f);
                     if (u >= 1) { _beam.enabled = false; Go(S.Idle); }
@@ -180,7 +186,7 @@ namespace OMX.Game
                 case S.Overheated:
                     _turret.localRotation = Quaternion.Slerp(_turret.localRotation, Quaternion.Euler(20, 0, 0), dt * 3);
                     if (UnityEngine.Random.value < dt * 20) Fx.I.Burst(_reactor.position + Vector3.up * Radius * 0.3f, new Color(0.7f, 0.7f, 0.75f, 1), 2, 3, Radius * 0.12f, 1.2f, true);
-                    if (_stateT > 3.8f / Mathf.Sqrt(spd)) Go(S.Idle);
+                    if (_stateT > 3.8f / Mathf.Sqrt(spd)) { if (_phase2Pending) { _phase2Pending = false; Go(S.Drones); } else Go(S.Idle); }
                     break;
                 case S.StompTele:
                     transform.position = _pos + Vector3.up * Mathf.Sin(Mathf.Clamp01(_stateT / 0.9f) * Mathf.PI * 0.5f) * Radius * 0.25f;
@@ -193,7 +199,7 @@ namespace OMX.Game
                     _stompR += dt * (22 + Radius);
                     if ((int)(_stateT * 12) != (int)((_stateT - dt) * 12)) Fx.I.Ring(_pos, Palette.Hdr(Palette.Warning, 3f), prev, _stompR, 0.25f, 0.05f);
                     if (dist + Player.Radius * 0.5f > prev && dist - Player.Radius * 0.5f < _stompR) Player.TakeDamage(20, _pos);
-                    Town.DamageStructures(_pos, _stompR, 30 * dt);
+                    Town.DamageStructures(_pos, _stompR, 30 * dt, Instigator.Enemy);
                     if (_stompR > Radius * 4.5f) Go(S.Idle);
                     break;
                 }
@@ -264,7 +270,7 @@ namespace OMX.Game
             var fwd = Quaternion.Euler(0, _heading, 0) * Vector3.forward;
             _pos += fwd * speed * dt;
             _pos = Town.Clamp(_pos, Radius);
-            Town.DamageStructures(_pos, Radius * 0.9f, 400 * dt);   // it walks through the town
+            Town.DamageStructures(_pos, Radius * 0.9f, 400 * dt, Instigator.Enemy);   // it walks through the town
             return true;
         }
 
@@ -309,7 +315,14 @@ namespace OMX.Game
             int before = Phase;
             Hp -= amount;
             _flash = Mathf.Max(_flash, 0.5f);
-            if (Phase == 2 && before == 1) { Audio?.Play("roar", 1f, 0.7f); Rig.Shake(0.5f); Go(S.Drones); }
+            if (Phase == 2 && before == 1)
+            {
+                Audio?.Play("roar", 1f, 0.7f); Rig.Shake(0.5f);
+                _beam.enabled = false;
+                // never cut the player's damage window short: keep the reactor open (and give back a little time), drones after
+                if (Exposed) { _phase2Pending = true; _stateT = Mathf.Min(_stateT, 1.5f); }
+                else Go(S.Drones);
+            }
             if (Hp <= 0) { Hp = 0; _beam.enabled = false; Projectiles.I.ClearHostile(); Go(S.Dying); Audio?.Play("roar", 1f, 0.45f); }
         }
 

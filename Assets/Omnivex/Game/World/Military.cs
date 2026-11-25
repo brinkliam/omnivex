@@ -46,7 +46,8 @@ namespace OMX.Game
             if (!Active || Player == null || !Player.IsAlive) return;
             float dt = Time.deltaTime;
             Quiet += dt;
-            float decay = Player.Hidden ? 0.28f : Quiet > 10 ? 0.06f : 0;
+            // cools whenever the player stops making noise, faster at high alert (others' destruction doesn't count)
+            float decay = Player.Hidden ? 0.28f + 0.04f * Stars : Quiet > 8 ? 0.08f + 0.03f * Stars : 0;
             Alert = Mathf.Max(0, Alert - decay * dt);
             int stars = Stars;
             if (stars != _lastStars)

@@ -35,6 +35,18 @@ namespace OMX.Core
         bool _gameplaySinceInterstitial = true;
         bool _inFlight;
         int _tokenSeq;
+        // a provider that never calls back must not block ads forever
+        public double TimeoutSeconds = 30;
+        public double ResumeGraceSeconds = 5;
+        double _deadline;
+        double _pausedAt = double.NaN;
+        string _pendingPlacement;
+        Action _timeoutResolve;
+        /// <summary>Raised when a pending ad is abandoned by the timeout (UI closes any overlay it opened).</summary>
+        public event Action<string> OnTimedOut;
+        public bool Busy => _inFlight;
+        public bool PersonalizedAds { get; private set; }
+        public bool ChildDirected { get; private set; }
         public bool Initialized { get; private set; }
         public string ProviderName => _provider.Name;
         public bool IsTestMode => _provider.IsTestMode;
@@ -47,8 +59,14 @@ namespace OMX.Core
             _config = config; _provider = provider; _clock = clock; _entitlements = entitlements; _analytics = analytics; _gate = gate;
         }
 
-        public void Initialize(Action<bool> done = null)
+        /// <summary>Only called once consent is resolved (see ConsentGate). Before that the manager reports "ads not initialised".</summary>
+        public void Initialize(Action<bool> done = null) => Initialize(new ConsentDecision(), done);
+
+        public void Initialize(ConsentDecision consent, Action<bool> done = null)
         {
+            PersonalizedAds = consent.PersonalizedAds && !consent.ChildDirected;
+            ChildDirected = consent.ChildDirected;
+            _provider.SetConsent(PersonalizedAds, ChildDirected);
             _provider.Initialize(ok =>
             {
                 Initialized = ok;
@@ -56,6 +74,46 @@ namespace OMX.Core
                     foreach (var p in _config.placements) if (p.enabled) _provider.Load(p.id, p.format);
                 done?.Invoke(ok);
             });
+        }
+
+        public void UpdateConsent(ConsentDecision consent)
+        {
+            PersonalizedAds = consent.PersonalizedAds && !consent.ChildDirected;
+            ChildDirected = consent.ChildDirected;
+            _provider.SetConsent(PersonalizedAds, ChildDirected);
+        }
+
+        /// <summary>Call every frame (real time). Resolves an ad whose provider never called back as a failure.</summary>
+        public void Tick()
+        {
+            if (!_inFlight || _timeoutResolve == null || !double.IsNaN(_pausedAt) || _clock.Now < _deadline) return;
+            var resolve = _timeoutResolve;
+            _timeoutResolve = null;
+            _analytics?.Track("ad_timeout", ("placement", _pendingPlacement ?? ""));
+            OnTimedOut?.Invoke(_pendingPlacement);
+            resolve();
+        }
+
+        /// <summary>
+        /// The app lost focus or was paused. A real full-screen ad usually pauses the game, so pausing is not a failure;
+        /// on resume the SDK gets a short grace period to deliver its callback before the request is abandoned.
+        /// </summary>
+        public void AppPaused(bool paused)
+        {
+            if (!_inFlight || _timeoutResolve == null) return;
+            if (paused) { if (double.IsNaN(_pausedAt)) _pausedAt = _clock.Now; return; }
+            if (double.IsNaN(_pausedAt)) return;
+            // time spent paused doesn't count; afterwards the SDK still gets at least a short grace period
+            _deadline = Math.Max(_deadline + (_clock.Now - _pausedAt), _clock.Now + ResumeGraceSeconds);
+            _pausedAt = double.NaN;
+        }
+
+        void Arm(string placementId, Action resolveAsFailed)
+        {
+            _pausedAt = double.NaN;
+            _pendingPlacement = placementId;
+            _deadline = _clock.Now + TimeoutSeconds;
+            _timeoutResolve = resolveAsFailed;
         }
 
         /// <summary>Call when the player does something meaningful; prevents back-to-back interstitials.</summary>
@@ -119,11 +177,13 @@ namespace OMX.Core
             bool closed = false;
             _inFlight = true;
             _analytics?.Track("ad_rewarded_start", ("placement", placementId));
-            _provider.Show(placementId, AdFormat.Rewarded, (result, earned, revenueUsd) =>
+            Action<AdResult, bool, double> cb = null;
+            cb = (result, earned, revenueUsd) =>
             {
                 if (closed) { _analytics?.Track("ad_duplicate_callback", ("placement", placementId)); return; }
                 closed = true;
                 _inFlight = false;
+                _timeoutResolve = null;
                 MarkShown(placementId);
                 _lastRewarded = _clock.Now;
                 if (result == AdResult.Completed && earned && _consumedTokens.Add(token))
@@ -140,7 +200,9 @@ namespace OMX.Core
                 }
                 onFinished?.Invoke(result, result == AdResult.Completed ? "" : result.ToString());
                 _provider.Load(placementId, AdFormat.Rewarded);
-            });
+            };
+            Arm(placementId, () => cb(AdResult.Failed, false, 0));
+            _provider.Show(placementId, AdFormat.Rewarded, cb);
         }
 
         string ReasonFor(string placementId) { CanShow(placementId, out var r); return r; }
@@ -157,11 +219,13 @@ namespace OMX.Core
             }
             bool closed = false;
             _inFlight = true;
-            _provider.Show(placementId, AdFormat.Interstitial, (result, _, revenueUsd) =>
+            Action<AdResult, bool, double> cb = null;
+            cb = (result, _, revenueUsd) =>
             {
                 if (closed) return;
                 closed = true;
                 _inFlight = false;
+                _timeoutResolve = null;
                 MarkShown(placementId);
                 _lastInterstitial = _clock.Now;
                 _interstitialsThisSession++;
@@ -173,7 +237,9 @@ namespace OMX.Core
                 }
                 onFinished?.Invoke(result);
                 _provider.Load(placementId, AdFormat.Interstitial);
-            });
+            };
+            Arm(placementId, () => cb(AdResult.Failed, false, 0));
+            _provider.Show(placementId, AdFormat.Interstitial, cb);
             return true;
         }
 

@@ -4,6 +4,9 @@ using UnityEngine;
 
 namespace OMX.Game
 {
+    /// <summary>Who caused structural damage. Only the player's destruction raises the alert or earns Essence.</summary>
+    public enum Instigator { Player, Enemy }
+
     /// <summary>
     /// A stage's playable world. The tide pool (Arena) and the town (Town) both implement this, so the creature,
     /// the ecosystem, projectiles and hazards don't care which stage they're in.
@@ -65,9 +68,9 @@ namespace OMX.Game
         }
 
         /// <summary>Area damage to destructible scenery (buildings). The pool has none.</summary>
-        public virtual void DamageStructures(Vector3 p, float radius, float dmg) { }
+        public virtual void DamageStructures(Vector3 p, float radius, float dmg, Instigator by) { }
 
         /// <summary>True if a projectile at p hits something solid (and applies dmg to it).</summary>
-        public virtual bool HitStructure(Vector3 p, float r, float dmg) => false;
+        public virtual bool HitStructure(Vector3 p, float r, float dmg, Instigator by) => false;
     }
 }

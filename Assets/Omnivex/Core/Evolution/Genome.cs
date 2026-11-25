@@ -35,7 +35,7 @@ namespace OMX.Core
         // ----------------------------------------------------------------- growth
 
         /// <summary>Biomass needed for the n-th evolution (1-based). Gentle power curve, never exponential.</summary>
-        public static float EvolutionThreshold(int n) => n <= 0 ? 0 : (float)(4.0 * Math.Pow(n, 1.6) * (n > 12 ? Math.Pow(n / 12.0, 0.6) : 1.0));
+        public static float EvolutionThreshold(int n) => n <= 0 ? 0 : (float)(4.0 * Math.Pow(n, 1.6) * (n > 12 ? Math.Pow(n / 12.0, 1.2) : 1.0));
 
         /// <summary>Creature radius from total biomass. Cube-root-ish so mass feels like volume.</summary>
         public static float RadiusFor(float biomass) => 0.5f * (float)Math.Pow(1.0 + biomass / 8.0, 0.42);
@@ -76,6 +76,24 @@ namespace OMX.Core
         }
 
         // ----------------------------------------------------------------- mutation
+
+        /// <summary>
+        /// Testing/dev: grow to a biomass target in one go, auto-picking each evolution as it unlocks, so no
+        /// evolution choices are left pending (no chain of Evolve screens).
+        /// </summary>
+        public void GrowSilently(float targetBiomass, Rng rng)
+        {
+            int guard = 0;
+            while (BiomassTotal < targetBiomass && guard++ < 1000)
+            {
+                Feed(Math.Max(0.5f, Math.Min(20f, targetBiomass - BiomassTotal) / Math.Max(0.1f, Current.Biomass)), (Dna)rng.Range(0, 5));
+                while (PendingEvolutions > 0)
+                {
+                    var o = Evolution.Offer(this, rng);
+                    if (o.Count == 0) SkipEvolution(); else Apply(o[0].Id);
+                }
+            }
+        }
 
         /// <summary>A free evolution not tied to biomass (Primed Egg, boss infection).</summary>
         public void GrantEvolution() => PendingEvolutions++;

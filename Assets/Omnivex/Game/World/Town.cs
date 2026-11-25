@@ -17,6 +17,7 @@ namespace OMX.Game
         public float CollapseT = -1, ChewFx, Tilt;
         public Vector3 TiltAxis;
         public bool Tree;            // swallowed whole on touch instead of chewed
+        public bool KilledByPlayer;  // who landed the final blow (gunships and the Bastion level the town too)
         public bool Standing => Stage < 3 && CollapseT < 0;
     }
 
@@ -285,7 +286,7 @@ namespace OMX.Game
 
         // ------------------------------------------------------------------ destruction
 
-        public override void DamageStructures(Vector3 at, float radius, float dmg)
+        public override void DamageStructures(Vector3 at, float radius, float dmg, Instigator by)
         {
             var p = new Vector2(at.x, at.z);
             foreach (var b in Buildings)
@@ -293,24 +294,24 @@ namespace OMX.Game
                 if (!b.Standing) continue;
                 if ((Closest(b, p) - p).sqrMagnitude > radius * radius) continue;
                 if (b.Tree) { Fell(b, false); continue; }
-                Damage(b, dmg);
+                Damage(b, dmg, by);
             }
         }
 
-        public override bool HitStructure(Vector3 at, float r, float dmg)
+        public override bool HitStructure(Vector3 at, float r, float dmg, Instigator by)
         {
             var p = new Vector2(at.x, at.z);
             foreach (var b in Buildings)
             {
                 if (!b.Standing || b.Tree || at.y > b.H + 1) continue;
                 if (Mathf.Abs(p.x - b.C.x) > b.Half.x + r || Mathf.Abs(p.y - b.C.y) > b.Half.y + r) continue;
-                if (dmg > 0) Damage(b, dmg);
+                if (dmg > 0) Damage(b, dmg, by);
                 return true;
             }
             return false;
         }
 
-        void Damage(Building b, float dmg)
+        void Damage(Building b, float dmg, Instigator by)
         {
             if (!b.Standing) return;
             b.Hp -= dmg;
@@ -324,7 +325,7 @@ namespace OMX.Game
                 Burst(b, 10 + stage * 8);
                 Audio?.At("vent", b.T.position, 0.5f);
             }
-            if (b.Hp <= 0) Collapse(b);
+            if (b.Hp <= 0) { b.KilledByPlayer = by == Instigator.Player; Collapse(b); }
         }
 
         void Collapse(Building b)
@@ -419,7 +420,7 @@ namespace OMX.Game
                 }
                 if (b.Tree) { Fell(b, true); continue; }
                 float dps = 26f * s.Bite * (1 + s.Demolish) * Mathf.Pow(pr, 1.2f);
-                Damage(b, dps * dt);
+                Damage(b, dps * dt, Instigator.Player);
                 b.ChewFx = 1;
                 if (_rng.Chance(dt * 8)) { Throw(new Vector3(Closest(b, p2).x, Mathf.Min(b.H, pr * 2), Closest(b, p2).y), 0.3f + pr * 0.1f); Player.Body.Swallow(0.15f); }
                 if (_rng.Chance(dt * 4)) Audio?.Gulp(0.9f, true);

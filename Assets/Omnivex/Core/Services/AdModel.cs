@@ -108,6 +108,8 @@ namespace OMX.Core
     {
         string Name { get; }
         bool IsTestMode { get; }
+        /// <summary>Applied before Initialize: personalized vs non-personalized ads, and child-directed treatment (COPPA).</summary>
+        void SetConsent(bool personalized, bool childDirected);
         void Initialize(Action<bool> done);
         bool IsReady(string placementId, AdFormat format);
         void Load(string placementId, AdFormat format);

@@ -98,12 +98,13 @@ namespace OMX.Game
             _run.Init();
 
             int q = services.Save.settings.quality;
-            ApplyQuality(q >= 0 ? q : (Application.isMobilePlatform ? 1 : 2));
+            ApplyQuality(q >= 0 ? q : (IsMobileLike ? 1 : 2));
 
             // the lair: the hatchling idles in the shallows while the pool lives around it
             _rig.Target = _player.transform; _rig.SnapToTarget();
             _run.EnterLair();
-            Debug.Log("[OMX] Omnivex ready. Seed " + seed + (_dev ? " (dev keys: F8 heal, F9 +biomass, F10 boss)" : ""));
+            Debug.Log("[OMX] Omnivex ready. Seed " + seed + (_dev ? " (dev keys: F7 heal, F8 Bastion fight, F9 jump to stage 2, F10 grow one tier)" : ""));
+            if (_dev) _ui.SetDevHint("DEV  F7 heal  |  F8 Bastion fight  |  F9 stage 2  |  F10 grow");
         }
 
         void BuildLighting()
@@ -175,6 +176,21 @@ namespace OMX.Game
             _volume.sharedProfile = profile;
         }
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [System.Runtime.InteropServices.DllImport("__Internal")] static extern int OMX_IsTouchDevice();
+#endif
+        /// <summary>Phones and tablets, including iPads whose Safari claims to be a Mac (see OMXDevice.jslib).</summary>
+        public static bool IsMobileLike
+        {
+            get
+            {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                try { if (OMX_IsTouchDevice() == 1) return true; } catch { }
+#endif
+                return Application.isMobilePlatform;
+            }
+        }
+
         public static void ApplyQuality(int q)
         {
             CurrentQuality = Mathf.Clamp(q, 0, 2);
@@ -191,7 +207,16 @@ namespace OMX.Game
                 var cd = _inst._rig?.Cam.GetUniversalAdditionalCameraData();
                 if (cd != null) cd.antialiasing = CurrentQuality == 2 ? AntialiasingMode.SubpixelMorphologicalAntiAliasing : AntialiasingMode.FastApproximateAntialiasing;
             }
-            Debug.Log($"[OMX] Quality {CurrentQuality} -> tier '{names[level]}'");
+            // phones and tablets: one shadow cascade and a shorter shadow distance, whatever tier asset is active
+            int cascades = -1;
+            if (CurrentQuality < 2 && !Application.isEditor && GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)
+            {
+                urp.shadowCascadeCount = 1;
+                urp.shadowDistance = Mathf.Min(urp.shadowDistance, 45f);
+                cascades = urp.shadowCascadeCount;
+            }
+            else if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset cur) cascades = cur.shadowCascadeCount;
+            Debug.Log($"[OMX] Quality {CurrentQuality} ({(IsMobileLike ? "phone/tablet" : "desktop")}) -> tier '{names[level]}', shadow cascades {cascades}, AA {(CurrentQuality == 2 ? "SMAA" : "FXAA")}");
         }
 
         float _hpLast = -1;
@@ -232,10 +257,10 @@ namespace OMX.Game
         {
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null || _player.Genome == null) return;
-            if (kb.f9Key.wasPressedThisFrame) { _player.Genome.Feed(25, Dna.Flesh); Debug.Log("[OMX] dev +25 biomass"); }
-            if (kb.f8Key.wasPressedThisFrame) _player.Revive(1f);
-            if (kb.f10Key.wasPressedThisFrame) { int target = _run.Stage == 2 ? 8 : 4; while (_player.Genome.Tier < target) _player.Genome.Feed(20, _run.Stage == 2 ? Dna.Alloy : Dna.Flora); Debug.Log("[OMX] dev: grown to boss tier"); }
-            if (kb.f11Key.wasPressedThisFrame) { _run.DevJumpToStage2(); Debug.Log("[OMX] dev: jumped to stage 2"); }
+            if (kb.f7Key.wasPressedThisFrame) { _player.Revive(1f); Debug.Log("[OMX] dev: full heal"); }
+            if (kb.f8Key.wasPressedThisFrame) { _run.DevBastion(); Debug.Log("[OMX] dev: Bastion fight"); }
+            if (kb.f9Key.wasPressedThisFrame) { _run.DevJumpToStage2(); Debug.Log("[OMX] dev: jumped to stage 2"); }
+            if (kb.f10Key.wasPressedThisFrame) { _run.DevGrowTier(); Debug.Log("[OMX] dev: grew one tier"); }
         }
     }
 }

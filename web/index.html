@@ -37,7 +37,10 @@
   <script>
     const stage = document.getElementById("stage");
     const canvas = document.getElementById("unity-canvas");
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    // iPadOS Safari reports "Macintosh": a Mac platform with a multi-touch screen is an iPad, so treat it as a tablet.
+    const isTouchMac = /Macintosh|MacIntel/.test(navigator.userAgent + " " + (navigator.platform || "")) && navigator.maxTouchPoints > 1;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || isTouchMac;
+    window.omxDeviceClass = isMobile ? "mobile" : "desktop";   // read by Assets/Plugins/WebGL/OMXDevice.jslib
 
     function showBanner(msg, type) {
       const w = document.getElementById("warning");
@@ -50,9 +53,9 @@
 
     const config = {
       arguments: [],
-      dataUrl: "Build/Web.data.unityweb",
-      frameworkUrl: "Build/Web.framework.js.unityweb",
-      codeUrl: "Build/Web.wasm.unityweb",
+      dataUrl: "Build/2b34162bc49eb4d7ea901db094210661.data.unityweb",
+      frameworkUrl: "Build/a5424156ad75c63d580ef1638c65b751.framework.js.unityweb",
+      codeUrl: "Build/3477e67bf26e311c3b99a628fb70729d.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Omnivex",
       productName: "Omnivex",
@@ -61,7 +64,7 @@
       // saves and settings persist across visits without manual syncing
       autoSyncPersistentDataPath: true,
       // sharp but affordable: full density on desktop, capped on high-density phones
-      devicePixelRatio: Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2),
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2),   // phones and tablets capped at 1.5x
     };
 
     // The canvas follows the window. On some browsers the canvas keeps a stale size after leaving fullscreen
@@ -91,7 +94,7 @@
     };
 
     const script = document.createElement("script");
-    script.src = "Build/Web.loader.js";
+    script.src = "Build/2d5bd302a4ab1d5f79f4a4721b276050.loader.js";
     script.onload = () => {
       createUnityInstance(canvas, config, (p) => { document.getElementById("fill").style.width = (100 * p) + "%"; })
         .then((instance) => {

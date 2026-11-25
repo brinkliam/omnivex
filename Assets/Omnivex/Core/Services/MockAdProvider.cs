@@ -24,6 +24,9 @@ namespace OMX.Core
         /// <summary>Optional UI presenter: (placement, format, onClosed(result, rewardEarned)).</summary>
         public Action<string, AdFormat, Action<AdResult, bool>> Presenter;
 
+        public bool Personalized { get; private set; }
+        public bool ChildDirected { get; private set; }
+        public void SetConsent(bool personalized, bool childDirected) { Personalized = personalized; ChildDirected = childDirected; }
         public void Initialize(Action<bool> done) => done?.Invoke(InitSucceeds);
 
         public bool IsReady(string placementId, AdFormat format) => Fill && _loaded.Contains(Key(placementId, format));

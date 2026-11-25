@@ -17,11 +17,11 @@ Play the web build at https://omnivex-one.vercel.app (add `?dev=1` for the test 
 | | Touch | Desktop |
 |---|---|---|
 | Swim | the thumbstick in the lower-left corner, or press anywhere and drag (floating stick) | WASD / arrows, or click-drag |
-| Dash | DASH button, or tap with a second finger | Space / Shift / right-click |
+| Dash | DASH button, or tap with another finger on the right side of the screen | Space / Shift / right-click |
 | Pause | II button | Esc / P |
 | Photo mode | PHOTO button (hides the UI and saves a screenshot) | same |
 
-Dev keys work in the Editor, development builds, and the web build with `?dev=1`: **F9** +25 biomass, **F10** grow to boss size, **F11** jump to Stage 2, **F8** full heal.
+Dev keys work in the Editor, development builds, and the web build with `?dev=1` (an on-screen line lists them): **F7** full heal, **F8** start the Bastion fight at boss-fight size, **F9** jump to Stage 2 at its normal starting size, **F10** grow one size tier. They auto-pick mutations along the way, so no chain of Evolve screens appears.
 
 ## What's in this build
 

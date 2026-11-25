@@ -91,6 +91,8 @@ namespace OMX.EditorTools
             PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Brotli;
             PlayerSettings.WebGL.decompressionFallback = true;
             PlayerSettings.WebGL.template = "PROJECT:Omnivex";
+            // content-hashed file names: a new deploy can never be mixed with a visitor's cached data from an older build
+            PlayerSettings.WebGL.nameFilesAsHashes = true;
             SetWebGLProp("initialMemorySize", 256);
             SetWebGLProp("maximumMemorySize", 2048);
             SetWebGLProp("memoryGrowthMode", "Geometric");

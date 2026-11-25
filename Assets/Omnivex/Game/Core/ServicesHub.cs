@@ -50,6 +50,7 @@ namespace OMX.Game
         public readonly EntitlementStore Entitlements;
         public readonly IPurchaseProvider Purchases;
         public readonly IClock Clock = new SystemClock();
+        public readonly ConsentGate Consent;
 
         public ServicesHub(IGameplayGate gate)
         {
@@ -76,19 +77,38 @@ namespace OMX.Game
             // Test ads only. LevelPlay plugs in behind IAdProvider once the account owner supplies app keys.
             MockAds = new MockAdProvider();
             Ads = new AdManager(cfg, MockAds, Clock, Entitlements, Analytics, gate);
-            Ads.Initialize();
+
+            // Consent gate: no ad SDK init and no analytics until the player has chosen (and UMP/ATT/COPPA agree).
+            // Until then the ad manager reports "ads not initialised", so no ads of any kind are shown.
+            Consent = new ConsentGate(new StubConsentPlatform());
+            Consent.OnResolved += d =>
+            {
+                Analytics.SetConsent(d.Analytics);
+                if (!Ads.Initialized) Ads.Initialize(d);
+                else Ads.UpdateConsent(d);
+                Debug.Log($"[OMX] Consent resolved via {Consent.PlatformName}: analytics={d.Analytics} personalizedAds={d.PersonalizedAds} childDirected={d.ChildDirected}");
+            };
+            if (Save.settings.consentAsked) Consent.Resolve(Save.settings.analyticsConsent, Save.settings.personalizedAds);
             Analytics.Track("session_start", ("load", outcome.ToString()), ("runs", Save.runs.ToString()));
         }
 
         public void Persist() { try { Store.Save(Save); } catch (Exception ex) { Debug.LogError("[OMX] save failed: " + ex.Message); } }
 
-        public void SetConsent(bool yes)
+        /// <summary>The first-launch choice: analytics and ad personalization together. Resolves the consent gate.</summary>
+        public void SetConsent(bool yes) => SetConsent(yes, yes);
+
+        public void SetConsent(bool analytics, bool personalizedAds)
         {
             Save.settings.consentAsked = true;
-            Save.settings.analyticsConsent = yes;
-            Analytics.SetConsent(yes);
+            Save.settings.analyticsConsent = analytics;
+            Save.settings.personalizedAds = personalizedAds;
             Persist();
+            Consent.Resolve(analytics, personalizedAds);
         }
+
+        /// <summary>Settings toggles change one half of the choice and re-resolve.</summary>
+        public void SetAnalyticsConsent(bool on) => SetConsent(on, Save.settings.personalizedAds);
+        public void SetPersonalizedAds(bool on) => SetConsent(Save.settings.analyticsConsent, on);
 
         public void Buy(string productId, Action<bool> done)
         {

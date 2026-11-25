@@ -88,7 +88,7 @@ namespace OMX.Game
             var p = Panel(28); p.style.maxWidth = 620; p.style.alignItems = Align.Center;
             p.Add(Text("BEFORE YOU HATCH", 30, Palette.Accent, true, TextAnchor.MiddleCenter));
             p.Add(Spacer(10));
-            p.Add(Text("Omnivex can record anonymous gameplay statistics (how far you get, which mutations you pick, which optional ads you watch) to balance the game. No name, email, contacts or location are collected. You can change this any time in Settings.", 18, Palette.Ui, false, TextAnchor.MiddleCenter));
+            p.Add(Text("Omnivex can record anonymous gameplay statistics (how far you get, which mutations you pick, which optional ads you watch) to balance the game, and can show ads tailored to you. No name, email, contacts or location are collected. Choosing No thanks turns statistics off and keeps any ads non-personalized. No ads load until you choose. You can change this any time in Settings.", 17, Palette.Ui, false, TextAnchor.MiddleCenter));
             p.Add(Spacer(16));
             var r = Box(true);
             r.Add(Btn("ALLOW", () => { Services.SetConsent(true); ShowLair(); }, true, 20));
@@ -214,7 +214,8 @@ namespace OMX.Game
             p.Add(q);
             p.Add(Toggle("Screen shake", st.shake, v => { st.shake = v; Rig.ShakeEnabled = v; }));
             p.Add(Toggle("Reduce flashing", st.reducedFlashing, v => st.reducedFlashing = v));
-            p.Add(Toggle("Anonymous analytics", st.analyticsConsent, v => Services.SetConsent(v)));
+            p.Add(Toggle("Anonymous analytics", st.analyticsConsent, v => Services.SetAnalyticsConsent(v)));
+            p.Add(Toggle("Personalized ads", st.personalizedAds, v => Services.SetPersonalizedAds(v)));
             var r = Box(true); r.style.flexWrap = Wrap.Wrap; r.style.marginTop = 10;
             bool adFree = Services.Entitlements.Has(Products.RemoveAds);
             var rm = Btn(adFree ? "AD-FREE ACTIVE" : $"REMOVE FORCED ADS {Services.Purchases.PriceLabel(Products.RemoveAds)}", () => Services.Buy(Products.RemoveAds, ok => ShowSettings(back)), false, 15);
@@ -360,7 +361,8 @@ namespace OMX.Game
             _hud.style.display = DisplayStyle.None;
             var bg = Modal(0.7f);
             var p = Panel(26); p.style.alignItems = Align.Center; p.style.width = Length.Percent(92); p.style.maxWidth = 640;
-            p.Add(Text(r.Cleared ? (r.Stage == 2 ? "HARROWGATE CONSUMED" : "POOL CONSUMED") : "DISSOLVED", 42, r.Cleared ? Palette.Accent : Palette.Danger, true, TextAnchor.MiddleCenter));
+            string title = r.Cleared ? (r.Stage == 2 ? "HARROWGATE CONSUMED" : "POOL CONSUMED") : r.Abandoned ? "RUN ENDED" : "DISSOLVED";
+            p.Add(Text(title, 42, r.Cleared ? Palette.Accent : r.Abandoned ? Palette.Ui : Palette.Danger, true, TextAnchor.MiddleCenter));
             p.Add(Text(r.Stage == 2 ? "Stage 2 - The Monster" : "Stage 1 - The Parasite", 15, Palette.UiDim, false, TextAnchor.MiddleCenter));
             p.Add(Text(r.Build, 22, Palette.Ui, true, TextAnchor.MiddleCenter));
             p.Add(Spacer(8));
@@ -389,6 +391,8 @@ namespace OMX.Game
 
         // ------------------------------------------------------------------ test ad presenter
 
+        Action _abortTestAd;
+
         void ShowTestAd(string placement, AdFormat format, Action<AdResult, bool> done)
         {
             _adLayer.Clear();
@@ -405,6 +409,8 @@ namespace OMX.Game
             float prevScale = Time.timeScale;
             Time.timeScale = 0;
             bool finished = false;
+            // if the ad manager gives up on this ad (timeout), close the overlay without reporting a result
+            _abortTestAd = () => { if (finished) return; finished = true; _adLayer.Clear(); _adLayer.pickingMode = PickingMode.Ignore; Time.timeScale = prevScale; };
             void Finish(AdResult res, bool earned)
             {
                 if (finished) return;
